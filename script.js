@@ -9,60 +9,109 @@ const firebaseConfig = {
     measurementId: "G-2RWR9Z9PX6"
 };
 
-// Инициализация
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
+if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
 const database = firebase.database();
 
-// Элементы страницы
-const messagesDiv = document.getElementById('messages');
-const messageInput = document.getElementById('messageInput');
-const sendBtn = document.getElementById('sendBtn');
-const usernameInput = document.getElementById('username');
+window.onload = function() {
+    const authScreen = document.getElementById('auth-screen');
+    const loginBtn = document.getElementById('loginBtn');
+    const regName = document.getElementById('reg-name');
+    const regPhone = document.getElementById('reg-phone');
+    const messagesDiv = document.getElementById('messages');
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    
+    const targetPhoneInput = document.getElementById('targetPhone');
+    const startChatBtn = document.getElementById('startChatBtn');
+    const chatHeader = document.getElementById('chatHeader');
 
-// ФУНКЦИЯ ОТПРАВКИ
-sendBtn.onclick = function() {
-    const name = usernameInput.value.trim() || "Аноним";
-    const text = messageInput.value.trim();
+    let user = JSON.parse(localStorage.getItem('chat_user'));
+    let currentChatID = null;
 
-    if (text === "") {
-        alert("Сначала напиши что-нибудь!");
-        return;
+    if (user && user.name && user.phone) {
+        if (authScreen) authScreen.style.display = 'none';
     }
 
-    database.ref('chat_messages').push({
-        username: name,
-        message: text,
-        timestamp: Date.now()
-    })
-    .then(() => {
-        messageInput.value = ""; 
-    })
-    .catch((error) => {
-        alert("Ошибка Firebase: " + error.message);
-    });
+    // Вход
+    if (loginBtn) {
+        loginBtn.onclick = function() {
+            const n = regName.value.trim();
+            const p = regPhone.value.trim();
+            if (n && p) {
+                user = { name: n, phone: p };
+                localStorage.setItem('chat_user', JSON.stringify(user));
+                location.reload();
+            }
+        };
+    }
+
+    // ФУНКЦИЯ СОЗДАНИЯ ID ЧАТА (всегда одинаковый для двух людей)
+    function getChatID(phone1, phone2) {
+        return [phone1, phone2].sort().join("_");
+    }
+
+    // Начать чат с конкретным человеком
+    startChatBtn.onclick = function() {
+        const friendPhone = targetPhoneInput.value.trim();
+        if (friendPhone && friendPhone !== user.phone) {
+            currentChatID = getChatID(user.phone, friendPhone);
+            chatHeader.innerText = "Чат с: " + friendPhone;
+            loadMessages(currentChatID);
+        } else {
+            alert("Введите корректный номер друга");
+        }
+    };
+
+    function doSend() {
+        const txt = messageInput.value.trim();
+        if (txt && user && currentChatID) {
+            database.ref('chats/' + currentChatID).push({
+                u: user.name,
+                p: user.phone,
+                m: txt,
+                t: Date.now()
+            });
+            messageInput.value = "";
+        } else if (!currentChatID) {
+            alert("Сначала выберите, кому писать!");
+        }
+    }
+
+    sendBtn.onclick = doSend;
+
+    // Загрузка сообщений именно для этого чата
+    function loadMessages(chatID) {
+        messagesDiv.innerHTML = ""; // Очищаем экран
+        database.ref('chats/' + chatID).off(); // Отключаем старые слушатели
+        
+        database.ref('chats/' + chatID).limitToLast(50).on('child_added', function(snap) {
+            const d = snap.val();
+            const time = new Date(d.t).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const wrap = document.createElement('div');
+            wrap.style.display = "flex";
+            wrap.style.width = "100%";
+            wrap.style.margin = "4px 0";
+
+            const el = document.createElement('div');
+            el.style.padding = "8px 12px";
+            el.style.borderRadius = "12px";
+            el.style.maxWidth = "70%";
+            el.style.fontFamily = "sans-serif";
+
+            if (d.p === user.phone) {
+                wrap.style.justifyContent = "flex-end";
+                el.style.background = "#dcf8c6";
+el.innerHTML = "<b>Вы</b><br>" + d.m + "<br><small style='font-size:10px; color:#888; float:right;'>" + time + " ✓✓</small>";
+            } else {
+                wrap.style.justifyContent = "flex-start";
+                el.style.background = "#fff";
+                el.style.border = "1px solid #eee";
+                el.innerHTML = "<b style='color:#075E54'>" + d.u + "</b><br>" + d.m + "<br><small style='font-size:10px; color:#888;'>" + time + "</small>";
+            }
+
+            wrap.appendChild(el);
+            messagesDiv.appendChild(wrap);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+    }
 };
-
-// ФУНКЦИЯ ПОЛУЧЕНИЯ
-database.ref('chat_messages').on('child_added', (snapshot) => {
-    const data = snapshot.val();
-    const msgElement = document.createElement('div');
-    msgElement.style.padding = "5px 10px";
-    msgElement.style.margin = "5px 0";
-    msgElement.style.background = "#e1ffc7";
-    msgElement.style.borderRadius = "5px";
-    
-    // ИСПРАВЛЕНО ЗДЕСЬ: добавлены правильные кавычки
-    msgElement.innerHTML = "<b>" + data.username + ":</b> " + data.message;
-    
-    messagesDiv.appendChild(msgElement);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-});
-// Отправка по нажатию клавиши Enter
-messageInput.addEventListener("keypress", function(event) {
-    if (event.key === "Enter") {
-        event.preventDefault(); // Чтобы страница не перезагружалась
-        sendBtn.click(); // Просто имитируем нажатие на кнопку "Отправить"
-    }
-});
