@@ -100,4 +100,49 @@ h2 {
 
 #sendBtn:hover {
     background: #777;
+}/* Сообщения слева (чужие) */
+.message {
+    align-self: flex-start;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 15px 15px 15px 0px;
+}
+
+/* Сообщения справа (мои) */
+.message.my-message {
+    align-self: flex-end;
+    background: #dcf8c6; /* Светло-зеленый, как в мессенджерах */
+    border-radius: 15px 15px 0px 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.message-bubble {
+    padding: 8px 12px;
+    border-radius: 12px;
+    max-width: 70%;
+    font-family: sans-serif;
+    position: relative;
+}
+
+.my-msg {
+    background: #dcf8c6;
+    border-radius: 12px 12px 0 12px;
+}
+
+.other-msg {
+    background: #ffffff;
+    border-radius: 12px 12px 12px 0;
+}
+
+.msg-info {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    font-size: 10px;
+    color: #888;
+    margin-top: 4px;
+    gap: 4px;
+}
+
+.status-icon {
+    color: #4fc3f7; /* Голубой цвет для "прочитано" */
+    font-weight: bold;
 }
