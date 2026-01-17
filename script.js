@@ -9,7 +9,6 @@ const firebaseConfig = {
     measurementId: "G-2RWR9Z9PX6"
 };
 
-// Инициализация Firebase
 if (!firebase.apps.length) { 
     firebase.initializeApp(firebaseConfig); 
 }
@@ -26,29 +25,24 @@ window.onload = function() {
     let activeChatID = null;
     let confirmationResult = null;
 
-    // 1. Проверка авторизации при загрузке
     if (currentUser) {
         if (authScreen) authScreen.style.display = 'none';
         if (mainApp) mainApp.style.display = 'block';
         loadContacts();
     }
 
-    // 2. Настройка reCAPTCHA (БЕЗ символов < или >)
     window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
         'size': 'normal'
     });
 
-    // 3. Отправка СМС
     const sendCodeBtn = document.getElementById('sendCodeBtn');
     if (sendCodeBtn) {
         sendCodeBtn.onclick = function() {
             const phone = document.getElementById('reg-phone').value.trim();
             const name = document.getElementById('reg-name').value.trim();
-            
             if (!phone.startsWith('+') || name === "") {
                 return alert("Введите имя и номер в формате +7...");
             }
-
             auth.signInWithPhoneNumber(phone, window.recaptchaVerifier)
                 .then(function(result) {
                     confirmationResult = result;
@@ -60,7 +54,6 @@ window.onload = function() {
         };
     }
 
-    // 4. Подтверждение кода из СМС
     const verifyCodeBtn = document.getElementById('verifyCodeBtn');
     if (verifyCodeBtn) {
         verifyCodeBtn.onclick = function() {
@@ -78,7 +71,6 @@ window.onload = function() {
         };
     }
 
-    // 5. Логика добавления контактов
     const addContactBtn = document.getElementById('addContactBtn');
     if (addContactBtn) {
         addContactBtn.onclick = function() {
@@ -98,20 +90,18 @@ window.onload = function() {
     function loadContacts() {
         if (!contactsList) return;
         contactsList.innerHTML = "";
-const contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
+        const contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
         contacts.forEach(function(phone) {
             const item = document.createElement('div');
-            item.innerHTML = "<b>" + phone + "</b>";
             item.style.padding = "15px";
             item.style.borderBottom = "1px solid #eee";
             item.style.cursor = "pointer";
+            item.innerText = phone;
             item.onclick = function() { startChat(phone); };
             contactsList.appendChild(item);
         });
     }
-
-    // 6. Переключение на чат с конкретным человеком
-    function startChat(friendPhone) {
+function startChat(friendPhone) {
         activeChatID = [currentUser.phone, friendPhone].sort().join("_");
         document.getElementById('chatHeader').innerText = "Чат с: " + friendPhone;
         messagesDiv.innerHTML = "";
@@ -120,8 +110,6 @@ const contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
         database.ref('chats/' + activeChatID).on('child_added', function(snap) {
             const d = snap.val();
             const wrap = document.createElement('div');
-            
-            // Стили сообщения
             wrap.style.padding = "8px 12px";
             wrap.style.margin = "4px";
             wrap.style.borderRadius = "10px";
@@ -138,14 +126,21 @@ const contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
             }
             
             const time = new Date(d.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-            wrap.innerHTML = "<div>" + d.m + "</div><small style='font-size:9px; color:#888; float:right;'>" + time + "</small>";
+            wrap.innerText = d.m;
             
+            const timeSpan = document.createElement('small');
+            timeSpan.style.display = "block";
+            timeSpan.style.fontSize = "9px";
+            timeSpan.style.color = "#888";
+            timeSpan.style.textAlign = "right";
+            timeSpan.innerText = time;
+            
+            wrap.appendChild(timeSpan);
             messagesDiv.appendChild(wrap);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
     }
 
-    // 7. Отправка сообщения
     function sendMessage() {
         const input = document.getElementById('messageInput');
         const txt = input.value.trim();
