@@ -115,6 +115,7 @@ function startChat(friendPhone) {
             wrap.style.borderRadius = "10px";
             wrap.style.maxWidth = "70%";
             wrap.style.fontFamily = "sans-serif";
+            wrap.style.display = "block";
 
             if (d.p === currentUser.phone) {
                 wrap.style.alignSelf = "flex-end";
@@ -125,9 +126,11 @@ function startChat(friendPhone) {
                 wrap.style.border = "1px solid #ddd";
             }
             
-            const time = new Date(d.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-            wrap.innerText = d.m;
+            const textPart = document.createElement('div');
+            textPart.innerText = d.m;
+            wrap.appendChild(textPart);
             
+            const time = new Date(d.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             const timeSpan = document.createElement('small');
             timeSpan.style.display = "block";
             timeSpan.style.fontSize = "9px";
