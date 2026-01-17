@@ -9,74 +9,74 @@ const firebaseConfig = {
     measurementId: "G-2RWR9Z9PX6"
 };
 
-firebase.initializeApp(firebaseConfig);
+// Инициализация
+if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
 const auth = firebase.auth();
 const database = firebase.database();
 
 window.onload = function() {
-    // Элементы входа
-    const phoneBox = document.getElementById('phone-box');
-    const codeBox = document.getElementById('code-box');
-    const sendCodeBtn = document.getElementById('sendCodeBtn');
-    const verifyCodeBtn = document.getElementById('verifyCodeBtn');
-    
-    // Элементы чата
+    const authScreen = document.getElementById('auth-screen');
+    const mainApp = document.getElementById('main-app');
     const contactsList = document.getElementById('contacts-list');
-    const addContactBtn = document.getElementById('addContactBtn');
-    const contactPhoneInput = document.getElementById('contactPhone');
-    const chatHeader = document.getElementById('chatHeader');
     const messagesDiv = document.getElementById('messages');
-
-    let confirmationResult = null;
+    
     let currentUser = JSON.parse(localStorage.getItem('chat_user'));
     let activeChatID = null;
+    let confirmationResult = null;
 
-    // Проверка входа
+    // 1. Проверка авторизации
     if (currentUser) {
-        document.getElementById('auth-screen').style.display = 'none';
+        authScreen.style.display = 'none';
+        mainApp.style.display = 'block';
         loadContacts();
     }
 
-    // 1. ОТПРАВКА СМС
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
+    // 2. Настройка reCAPTCHA
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+        'size': 'normal'
+    });
 
-    sendCodeBtn.onclick = function() {
-        const phone = document.getElementById('reg-phone').value;
-        const name = document.getElementById('reg-name').value;
-        if (!phone || !name) return alert("Введите имя и номер!");
+    // 3. Отправка СМС
+    document.getElementById('sendCodeBtn').onclick = function() {
+        const phone = document.getElementById('reg-phone').value.trim();
+        const name = document.getElementById('reg-name').value.trim();
+        
+        if (!phone.startsWith('+') || name === "") {
+            return alert("Введите имя и номер в формате +7...");
+        }
 
         auth.signInWithPhoneNumber(phone, window.recaptchaVerifier)
             .then((result) => {
                 confirmationResult = result;
-                phoneBox.style.display = 'none';
-                codeBox.style.display = 'block';
-            }).catch((err) => alert(err.message));
+                document.getElementById('phone-box').style.display = 'none';
+                document.getElementById('code-box').style.display = 'block';
+            }).catch(err => alert("Ошибка: " + err.message));
     };
 
-    // 2. ПОДТВЕРЖДЕНИЕ КОДА
-    verifyCodeBtn.onclick = function() {
-        const code = document.getElementById('sms-code').value;
+    // 4. Подтверждение кода
+    document.getElementById('verifyCodeBtn').onclick = function() {
+        const code = document.getElementById('sms-code').value.trim();
         confirmationResult.confirm(code).then((result) => {
-            const user = { 
-                name: document.getElementById('reg-name').value, 
-                phone: result.user.phoneNumber 
+            const user = {
+                name: document.getElementById('reg-name').value,
+                phone: result.user.phoneNumber
             };
             localStorage.setItem('chat_user', JSON.stringify(user));
             location.reload();
         }).catch(() => alert("Неверный код!"));
     };
 
-    // 3. КОНТАКТЫ
-    addContactBtn.onclick = function() {
-        const p = contactPhoneInput.value.trim();
-        if (p) {
+    // 5. Контакты
+    document.getElementById('addContactBtn').onclick = function() {
+        const p = document.getElementById('contactPhone').value.trim();
+        if (p && p !== currentUser.phone) {
             let contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
             if (!contacts.includes(p)) {
                 contacts.push(p);
                 localStorage.setItem('my_contacts', JSON.stringify(contacts));
                 loadContacts();
             }
-            contactPhoneInput.value = "";
+            document.getElementById('contactPhone').value = "";
         }
     };
 
@@ -84,38 +84,45 @@ window.onload = function() {
         contactsList.innerHTML = "";
         const contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
         contacts.forEach(phone => {
-            const div = document.createElement('div');
-            div.innerHTML = phone;
-            div.style = "padding:15px; border-bottom:1px solid #eee; cursor:pointer;";
-            div.onclick = () => startChat(phone);
-            contactsList.appendChild(div);
+            const item = document.createElement('div');
+            item.innerHTML = <b>${phone}</b>;
+            item.style = "padding:15px; border-bottom:1px solid #eee; cursor:pointer; hover:background:#f5f5f5";
+            item.onclick = () => startChat(phone);
+            contactsList.appendChild(item);
         });
     }
 
+    // 6. Загрузка чата
     function startChat(friendPhone) {
         activeChatID = [currentUser.phone, friendPhone].sort().join("_");
-        chatHeader.innerText = "Чат с: " + friendPhone;
+document.getElementById('chatHeader').innerText = "Чат с: " + friendPhone;
         messagesDiv.innerHTML = "";
-database.ref('chats/' + activeChatID).off();
+        
+        database.ref('chats/' + activeChatID).off();
         database.ref('chats/' + activeChatID).on('child_added', (snap) => {
             const d = snap.val();
-            const msg = document.createElement('div');
-            msg.style = d.p === currentUser.phone ? "align-self:flex-end; background:#dcf8c6; padding:10px; margin:5px; border-radius:10px;" : "align-self:flex-start; background:white; padding:10px; margin:5px; border-radius:10px;";
-            msg.innerHTML = d.m;
-            messagesDiv.appendChild(msg);
+            const wrap = document.createElement('div');
+            wrap.style = d.p === currentUser.phone ? "align-self:flex-end; background:#dcf8c6; padding:8px 12px; margin:4px; border-radius:10px; max-width:70%; position:relative;" : "align-self:flex-start; background:white; padding:8px 12px; margin:4px; border-radius:10px; max-width:70%; border:1px solid #ddd;";
+            wrap.innerHTML = <div>${d.m}</div><small style="font-size:9px; color:#888; float:right; margin-top:5px;">${new Date(d.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>;
+            messagesDiv.appendChild(wrap);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
     }
 
-    document.getElementById('sendBtn').onclick = function() {
-        const txt = document.getElementById('messageInput').value;
+    // 7. Отправка сообщения
+    function sendMessage() {
+        const txt = document.getElementById('messageInput').value.trim();
         if (txt && activeChatID) {
             database.ref('chats/' + activeChatID).push({
                 p: currentUser.phone,
+                n: currentUser.name,
                 m: txt,
                 t: Date.now()
             });
             document.getElementById('messageInput').value = "";
         }
-    };
+    }
+
+    document.getElementById('sendBtn').onclick = sendMessage;
+    document.getElementById('messageInput').onkeypress = (e) => { if(e.key === "Enter") sendMessage(); };
 };
