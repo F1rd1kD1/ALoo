@@ -9,109 +9,113 @@ const firebaseConfig = {
     measurementId: "G-2RWR9Z9PX6"
 };
 
-if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
 const database = firebase.database();
 
 window.onload = function() {
-    const authScreen = document.getElementById('auth-screen');
-    const loginBtn = document.getElementById('loginBtn');
-    const regName = document.getElementById('reg-name');
-    const regPhone = document.getElementById('reg-phone');
-    const messagesDiv = document.getElementById('messages');
-    const messageInput = document.getElementById('messageInput');
-    const sendBtn = document.getElementById('sendBtn');
+    // Элементы входа
+    const phoneBox = document.getElementById('phone-box');
+    const codeBox = document.getElementById('code-box');
+    const sendCodeBtn = document.getElementById('sendCodeBtn');
+    const verifyCodeBtn = document.getElementById('verifyCodeBtn');
     
-    const targetPhoneInput = document.getElementById('targetPhone');
-    const startChatBtn = document.getElementById('startChatBtn');
+    // Элементы чата
+    const contactsList = document.getElementById('contacts-list');
+    const addContactBtn = document.getElementById('addContactBtn');
+    const contactPhoneInput = document.getElementById('contactPhone');
     const chatHeader = document.getElementById('chatHeader');
+    const messagesDiv = document.getElementById('messages');
 
-    let user = JSON.parse(localStorage.getItem('chat_user'));
-    let currentChatID = null;
+    let confirmationResult = null;
+    let currentUser = JSON.parse(localStorage.getItem('chat_user'));
+    let activeChatID = null;
 
-    if (user && user.name && user.phone) {
-        if (authScreen) authScreen.style.display = 'none';
+    // Проверка входа
+    if (currentUser) {
+        document.getElementById('auth-screen').style.display = 'none';
+        loadContacts();
     }
 
-    // Вход
-    if (loginBtn) {
-        loginBtn.onclick = function() {
-            const n = regName.value.trim();
-            const p = regPhone.value.trim();
-            if (n && p) {
-                user = { name: n, phone: p };
-                localStorage.setItem('chat_user', JSON.stringify(user));
-                location.reload();
+    // 1. ОТПРАВКА СМС
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
+
+    sendCodeBtn.onclick = function() {
+        const phone = document.getElementById('reg-phone').value;
+        const name = document.getElementById('reg-name').value;
+        if (!phone || !name) return alert("Введите имя и номер!");
+
+        auth.signInWithPhoneNumber(phone, window.recaptchaVerifier)
+            .then((result) => {
+                confirmationResult = result;
+                phoneBox.style.display = 'none';
+                codeBox.style.display = 'block';
+            }).catch((err) => alert(err.message));
+    };
+
+    // 2. ПОДТВЕРЖДЕНИЕ КОДА
+    verifyCodeBtn.onclick = function() {
+        const code = document.getElementById('sms-code').value;
+        confirmationResult.confirm(code).then((result) => {
+            const user = { 
+                name: document.getElementById('reg-name').value, 
+                phone: result.user.phoneNumber 
+            };
+            localStorage.setItem('chat_user', JSON.stringify(user));
+            location.reload();
+        }).catch(() => alert("Неверный код!"));
+    };
+
+    // 3. КОНТАКТЫ
+    addContactBtn.onclick = function() {
+        const p = contactPhoneInput.value.trim();
+        if (p) {
+            let contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
+            if (!contacts.includes(p)) {
+                contacts.push(p);
+                localStorage.setItem('my_contacts', JSON.stringify(contacts));
+                loadContacts();
             }
-        };
-    }
-
-    // ФУНКЦИЯ СОЗДАНИЯ ID ЧАТА (всегда одинаковый для двух людей)
-    function getChatID(phone1, phone2) {
-        return [phone1, phone2].sort().join("_");
-    }
-
-    // Начать чат с конкретным человеком
-    startChatBtn.onclick = function() {
-        const friendPhone = targetPhoneInput.value.trim();
-        if (friendPhone && friendPhone !== user.phone) {
-            currentChatID = getChatID(user.phone, friendPhone);
-            chatHeader.innerText = "Чат с: " + friendPhone;
-            loadMessages(currentChatID);
-        } else {
-            alert("Введите корректный номер друга");
+            contactPhoneInput.value = "";
         }
     };
 
-    function doSend() {
-        const txt = messageInput.value.trim();
-        if (txt && user && currentChatID) {
-            database.ref('chats/' + currentChatID).push({
-                u: user.name,
-                p: user.phone,
-                m: txt,
-                t: Date.now()
-            });
-            messageInput.value = "";
-        } else if (!currentChatID) {
-            alert("Сначала выберите, кому писать!");
-        }
+    function loadContacts() {
+        contactsList.innerHTML = "";
+        const contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
+        contacts.forEach(phone => {
+            const div = document.createElement('div');
+            div.innerHTML = phone;
+            div.style = "padding:15px; border-bottom:1px solid #eee; cursor:pointer;";
+            div.onclick = () => startChat(phone);
+            contactsList.appendChild(div);
+        });
     }
 
-    sendBtn.onclick = doSend;
-
-    // Загрузка сообщений именно для этого чата
-    function loadMessages(chatID) {
-        messagesDiv.innerHTML = ""; // Очищаем экран
-        database.ref('chats/' + chatID).off(); // Отключаем старые слушатели
-        
-        database.ref('chats/' + chatID).limitToLast(50).on('child_added', function(snap) {
+    function startChat(friendPhone) {
+        activeChatID = [currentUser.phone, friendPhone].sort().join("_");
+        chatHeader.innerText = "Чат с: " + friendPhone;
+        messagesDiv.innerHTML = "";
+database.ref('chats/' + activeChatID).off();
+        database.ref('chats/' + activeChatID).on('child_added', (snap) => {
             const d = snap.val();
-            const time = new Date(d.t).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            const wrap = document.createElement('div');
-            wrap.style.display = "flex";
-            wrap.style.width = "100%";
-            wrap.style.margin = "4px 0";
-
-            const el = document.createElement('div');
-            el.style.padding = "8px 12px";
-            el.style.borderRadius = "12px";
-            el.style.maxWidth = "70%";
-            el.style.fontFamily = "sans-serif";
-
-            if (d.p === user.phone) {
-                wrap.style.justifyContent = "flex-end";
-                el.style.background = "#dcf8c6";
-el.innerHTML = "<b>Вы</b><br>" + d.m + "<br><small style='font-size:10px; color:#888; float:right;'>" + time + " ✓✓</small>";
-            } else {
-                wrap.style.justifyContent = "flex-start";
-                el.style.background = "#fff";
-                el.style.border = "1px solid #eee";
-                el.innerHTML = "<b style='color:#075E54'>" + d.u + "</b><br>" + d.m + "<br><small style='font-size:10px; color:#888;'>" + time + "</small>";
-            }
-
-            wrap.appendChild(el);
-            messagesDiv.appendChild(wrap);
+            const msg = document.createElement('div');
+            msg.style = d.p === currentUser.phone ? "align-self:flex-end; background:#dcf8c6; padding:10px; margin:5px; border-radius:10px;" : "align-self:flex-start; background:white; padding:10px; margin:5px; border-radius:10px;";
+            msg.innerHTML = d.m;
+            messagesDiv.appendChild(msg);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
     }
+
+    document.getElementById('sendBtn').onclick = function() {
+        const txt = document.getElementById('messageInput').value;
+        if (txt && activeChatID) {
+            database.ref('chats/' + activeChatID).push({
+                p: currentUser.phone,
+                m: txt,
+                t: Date.now()
+            });
+            document.getElementById('messageInput').value = "";
+        }
+    };
 };
