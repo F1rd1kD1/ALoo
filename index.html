@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Secure Neon Chat</title>
+    <title>Neon Secure Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div id="auth-screen">
+    <div id="auth-screen" class="auth-container">
         <h2 id="auth-title">Вход</h2>
         
         <div id="reg-fields" style="display:none;">
@@ -22,21 +22,21 @@
         </div>
 
         <input type="text" id="auth-phone" placeholder="Номер телефона">
-        <input type="password" id="auth-pass" placeholder="Пароль">
+        <input type="password" id="auth-pass" placeholder="Пароль (если есть)">
         
         <button id="mainAuthBtn">Войти</button>
-        <p id="toggleAuth" style="cursor:pointer; margin-top:15px; font-size:14px; color:#6e8efb; text-align:center;">Нет аккаунта? Зарегистрироваться</p>
+        <p id="toggleAuth">Нет аккаунта? Зарегистрироваться</p>
     </div>
 
     <div id="main-app" style="display:none;">
         
         <div id="contacts-page" class="page">
             <div class="header">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <img id="my-avatar-display" src="" onclick="openEditProfile()" style="width:40px; height:40px; border-radius:50%; object-fit:cover; cursor:pointer; border:1px solid #6e8efb;">
-                    <span id="my-name-display" style="font-weight:bold;"></span>
+                <div class="user-info">
+                    <img id="my-avatar-display" src="" onclick="openEditProfile()">
+                    <span id="my-name-display"></span>
                 </div>
-                <button onclick="logout()">🚪</button>
+                <button class="icon-btn" onclick="logout()">🚪</button>
             </div>
             <div class="add-box">
                 <input type="text" id="search-input" placeholder="Номер или @username">
@@ -47,9 +47,9 @@
 
         <div id="chat-page" class="page" style="display:none;">
             <div class="header">
-                <button onclick="backToContacts()">⬅</button>
-                <span id="chatTitle" style="font-weight:bold;">Чат</span>
-                <button id="clearChatBtn">🗑️</button>
+                <button class="icon-btn" onclick="backToContacts()">⬅</button>
+                <span id="chatTitle">Чат</span>
+                <button class="icon-btn" id="clearChatBtn">🗑️</button>
             </div>
             <div id="messages"></div>
             <div class="input-area">
@@ -60,31 +60,34 @@
 
         <div id="edit-profile-page" class="page" style="display:none;">
             <div class="header">
-                <button onclick="closeEditProfile()">⬅ Назад</button>
+                <button class="icon-btn" onclick="closeEditProfile()">⬅</button>
                 <span>Настройки</span>
             </div>
-            <div style="padding: 20px; text-align: center;">
-                <div onclick="document.getElementById('edit-avatar-input').click()" style="width:100px; height:100px; border-radius:50%; background:#1a1a25; margin:0 auto 20px; overflow:hidden; border:2px solid #6e8efb; cursor:pointer;">
-                    <img id="edit-img-preview" src="" style="width:100%; height:100%; object-fit:cover;">
+            <div class="settings-content">
+                <div class="edit-avatar-container" onclick="document.getElementById('edit-avatar-input').click()">
+                    <img id="edit-img-preview" src="">
+                    <div class="edit-overlay">📷</div>
                 </div>
                 <input type="file" id="edit-avatar-input" style="display:none;" accept="image/*">
-                <input type="text" id="edit-name-input" placeholder="Имя">
-                <input type="text" id="edit-username-input" placeholder="@username">
-                <button id="saveProfileBtn" style="width:100%; background:#28a745;">Сохранить</button>
+                <label>Имя профиля:</label>
+                <input type="text" id="edit-name-input">
+                <label>Ваш никнейм:</label>
+                <input type="text" id="edit-username-input">
+                <p style="font-size: 12px; color: #888; margin-bottom: 20px;">Пароль можно будет установить при сохранении.</p>
+                <button id="saveProfileBtn">Сохранить изменения</button>
             </div>
         </div>
     </div>
 
     <div id="delete-modal" class="modal" style="display:none;">
-<div class="modal-content">
+        <div class="modal-content">
             <h3>Удалить чат?</h3>
-            <button id="delete-mine-btn" style="width:100%; margin-bottom:10px; background:#444;">У себя</button>
-            <button id="delete-all-btn" style="width:100%; background:#ff4f4f;">У всех</button>
-            <button onclick="closeModals()" style="background:none; color:#888; margin-top:10px;">Отмена</button>
+            <button id="delete-mine-btn" class="secondary-btn">Удалить у себя</button>
+            <button id="delete-all-btn" class="danger-btn">Удалить у всех</button>
+            <button onclick="closeModals()" class="text-btn">Отмена</button>
         </div>
     </div>
-
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="script.js"></script>
 </body>
