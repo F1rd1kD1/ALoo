@@ -2,14 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Chat Pro Elite</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Pro Messenger</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div id="auth-screen">
-        <h2 style="margin-top:0; text-align:center;">Создать профиль</h2>
+        <h2>Регистрация</h2>
         <div id="preview-avatar" onclick="document.getElementById('avatar-input').click()">
             <span id="plus-icon">+</span>
             <img id="chosen-img" src="">
@@ -17,45 +17,56 @@
         <input type="file" id="avatar-input" style="display:none;" accept="image/*">
         <input type="text" id="reg-name" placeholder="Ваше имя">
         <input type="text" id="reg-phone" placeholder="Ваш номер">
-        <button id="sendCodeBtn">Войти в систему</button>
+        <button id="sendCodeBtn">Войти</button>
     </div>
 
     <div id="main-app" style="display:none;">
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <img id="my-avatar-display" src="">
-                    <span id="user-display-name"></span>
-                </div>
-                <button id="logoutBtn" style="background:none; color:#ff4f4f;">Выйти</button>
+        
+        <div id="contacts-page" class="page">
+            <div class="header">
+                <img id="my-avatar-display" src="" alt="">
+                <span>Чаты</span>
+                <button onclick="logout()">🚪</button>
             </div>
-            <div class="add-contact-box">
-                <input type="text" id="contactPhone" placeholder="Добавить номер">
+            <div class="add-box">
+                <input type="text" id="contactPhone" placeholder="Номер друга">
                 <button id="addContactBtn">+</button>
             </div>
             <div id="contacts-list"></div>
         </div>
 
-        <div class="chat-area">
-            <div id="chatHeader">
-                <span id="chatTitle">Выберите чат</span>
+        <div id="chat-page" class="page" style="display:none;">
+            <div class="header">
+                <button onclick="backToContacts()">⬅</button>
+                <span id="chatTitle" style="cursor:pointer; text-decoration: underline;">Имя...</span>
                 <button id="clearChatBtn">🗑️</button>
             </div>
-
+            
             <div id="messages"></div>
 
-            <div id="reply-preview" style="display:none; background:rgba(255,255,255,0.05); padding:10px 20px; border-left:3px solid #a777e3;">
-                <div id="reply-text" style="font-size:12px; opacity:0.7;"></div>
-                <button onclick="cancelReply()" style="position:absolute; right:20px; background:none; color:white;">✕</button>
+            <div id="reply-preview" style="display:none;">
+                <div id="reply-text"></div>
+                <button onclick="cancelReply()">✕</button>
             </div>
 
             <div class="input-area">
-                <button onclick="document.getElementById('img-msg-input').click()">🖼️</button>
-                <input type="file" id="img-msg-input" style="display:none;" accept="image/*">
+                <button onclick="document.getElementById('img-input').click()">🖼️</button>
+                <input type="file" id="img-input" style="display:none;" accept="image/*">
+                <button onclick="document.getElementById('video-input').click()">🎥</button>
+                <input type="file" id="video-input" style="display:none;" accept="video/*">
                 <button id="voiceBtn">🎤</button>
-                <input type="text" id="messageInput" placeholder="Напишите сообщение...">
+                <input type="text" id="messageInput" placeholder="Сообщение...">
                 <button id="sendBtn">➤</button>
             </div>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <img id="view-avatar" src="" style="width:100px; height:100px; border-radius:50%; object-fit:cover;">
+            <h3 id="view-name">Имя</h3>
+            <p id="view-phone" style="color:#888;"></p>
+            <button onclick="closeProfile()" style="width:100%; margin-top:10px; background:#444;">Закрыть</button>
         </div>
     </div>
 
