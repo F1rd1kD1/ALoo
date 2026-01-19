@@ -3,43 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Secure Chat</title>
+    <title>Neon Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
     <div id="auth-screen" class="auth-container">
-        <h2 id="auth-title">Вход</h2>
-        
+        <h2 id="auth-title">ВХОД</h2>
         <div id="reg-fields" style="display:none;">
-            <div id="preview-avatar" onclick="document.getElementById('avatar-input').click()">
-                <span id="plus-icon">+</span>
-                <img id="chosen-img" src="" style="display:none; width:100%; height:100%; object-fit:cover;">
+            <div class="avatar-wrapper" onclick="document.getElementById('avatar-input').click()">
+                <img id="chosen-img" src="https://cdn-icons-png.flaticon.com/512/149/149071.png">
             </div>
             <input type="file" id="avatar-input" style="display:none;" accept="image/*">
             <input type="text" id="reg-name" placeholder="Ваше имя">
             <input type="text" id="reg-username" placeholder="@username">
         </div>
-
         <input type="text" id="auth-phone" placeholder="Номер телефона">
-        <input type="password" id="auth-pass" placeholder="Пароль (если есть)">
-        
-        <button id="mainAuthBtn">Войти</button>
-        <p id="toggleAuth">Нет аккаунта? Зарегистрироваться</p>
+        <input type="password" id="auth-pass" placeholder="Пароль">
+        <button id="mainAuthBtn">ПОДТВЕРДИТЬ</button>
+        <p id="toggleAuth" style="cursor:pointer; margin-top:15px; font-size:14px; color:#6e8efb;">Создать аккаунт</p>
     </div>
 
     <div id="main-app" style="display:none;">
-        
         <div id="contacts-page" class="page">
             <div class="header">
-                <div class="user-info">
-                    <img id="my-avatar-display" src="" onclick="openEditProfile()">
-                    <span id="my-name-display"></span>
-                </div>
-                <button class="icon-btn" onclick="logout()">🚪</button>
+                <img id="my-avatar-display" class="mini-ava" src="">
+                <span id="my-name-display" style="flex:1; margin-left:10px; font-weight:bold;"></span>
+                <button onclick="logout()" class="icon-btn">🚪</button>
             </div>
-            <div class="add-box">
-                <input type="text" id="search-input" placeholder="Номер или @username">
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Поиск @username или номер">
                 <button id="addContactBtn">🔍</button>
             </div>
             <div id="contacts-list"></div>
@@ -47,47 +39,35 @@
 
         <div id="chat-page" class="page" style="display:none;">
             <div class="header">
-                <button class="icon-btn" onclick="backToContacts()">⬅</button>
-                <span id="chatTitle">Чат</span>
-                <button class="icon-btn" id="clearChatBtn">🗑️</button>
+                <button onclick="backToContacts()" class="icon-btn">⬅️</button>
+                <div class="chat-info">
+                    <span id="chatTitle">Чат</span>
+                    <div class="status-row">
+                        <span id="online-status-text">в сети</span>
+                        <span id="typing-indicator">печатает...</span>
+                    </div>
+                </div>
+                <button id="clearChatBtn" class="icon-btn">🗑</button>
             </div>
             <div id="messages"></div>
             <div class="input-area">
+                <button onclick="document.getElementById('chat-file-input').click()" class="icon-btn">📎</button>
+                <input type="file" id="chat-file-input" style="display:none;" accept="image/*">
                 <input type="text" id="messageInput" placeholder="Сообщение...">
                 <button id="sendBtn">➤</button>
-            </div>
-        </div>
-
-        <div id="edit-profile-page" class="page" style="display:none;">
-            <div class="header">
-                <button class="icon-btn" onclick="closeEditProfile()">⬅</button>
-                <span>Настройки</span>
-            </div>
-            <div class="settings-content">
-                <div class="edit-avatar-container" onclick="document.getElementById('edit-avatar-input').click()">
-                    <img id="edit-img-preview" src="">
-                    <div class="edit-overlay">📷</div>
-                </div>
-                <input type="file" id="edit-avatar-input" style="display:none;" accept="image/*">
-                <label>Имя профиля:</label>
-                <input type="text" id="edit-name-input">
-                <label>Ваш никнейм:</label>
-                <input type="text" id="edit-username-input">
-                <p style="font-size: 12px; color: #888; margin-bottom: 20px;">Пароль можно будет установить при сохранении.</p>
-                <button id="saveProfileBtn">Сохранить изменения</button>
             </div>
         </div>
     </div>
 
     <div id="delete-modal" class="modal" style="display:none;">
         <div class="modal-content">
-            <h3>Удалить чат?</h3>
-            <button id="delete-mine-btn" class="secondary-btn">Удалить у себя</button>
+            <h3>Удалить?</h3>
             <button id="delete-all-btn" class="danger-btn">Удалить у всех</button>
-            <button onclick="closeModals()" class="text-btn">Отмена</button>
+            <button onclick="document.getElementById('delete-modal').style.display='none'" class="cancel-btn">Отмена</button>
         </div>
     </div>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="script.js"></script>
 </body>
