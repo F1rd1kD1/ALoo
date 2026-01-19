@@ -3,22 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Messenger Pro</title>
+    <title>Secure Neon Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div id="auth-screen">
-        <h2>Регистрация</h2>
-        <div id="preview-avatar" onclick="document.getElementById('avatar-input').click()">
-            <span id="plus-icon">+</span>
-            <img id="chosen-img" src="" style="display:none; width:100%; height:100%; object-fit:cover;">
+        <h2 id="auth-title">Вход</h2>
+        
+        <div id="reg-fields" style="display:none;">
+            <div id="preview-avatar" onclick="document.getElementById('avatar-input').click()">
+                <span id="plus-icon">+</span>
+                <img id="chosen-img" src="" style="display:none; width:100%; height:100%; object-fit:cover;">
+            </div>
+            <input type="file" id="avatar-input" style="display:none;" accept="image/*">
+            <input type="text" id="reg-name" placeholder="Ваше имя">
+            <input type="text" id="reg-username" placeholder="@username">
         </div>
-        <input type="file" id="avatar-input" style="display:none;" accept="image/*">
-        <input type="text" id="reg-name" placeholder="Ваше имя">
-        <input type="text" id="reg-username" placeholder="@username (можно пропустить)">
-        <input type="text" id="reg-phone" placeholder="Ваш номер">
-        <button id="sendCodeBtn">Войти</button>
+
+        <input type="text" id="auth-phone" placeholder="Номер телефона">
+        <input type="password" id="auth-pass" placeholder="Пароль">
+        
+        <button id="mainAuthBtn">Войти</button>
+        <p id="toggleAuth" style="cursor:pointer; margin-top:15px; font-size:14px; color:#6e8efb; text-align:center;">Нет аккаунта? Зарегистрироваться</p>
     </div>
 
     <div id="main-app" style="display:none;">
@@ -41,7 +48,7 @@
         <div id="chat-page" class="page" style="display:none;">
             <div class="header">
                 <button onclick="backToContacts()">⬅</button>
-                <span id="chatTitle" style="cursor:pointer; font-weight:bold;">Чат</span>
+                <span id="chatTitle" style="font-weight:bold;">Чат</span>
                 <button id="clearChatBtn">🗑️</button>
             </div>
             <div id="messages"></div>
@@ -56,33 +63,24 @@
                 <button onclick="closeEditProfile()">⬅ Назад</button>
                 <span>Настройки</span>
             </div>
-            <div style="padding: 30px; text-align: center;">
-                <div onclick="document.getElementById('edit-avatar-input').click()" style="width:110px; height:110px; border-radius:50%; background:#1a1a25; margin:0 auto 20px; overflow:hidden; border:2px solid #6e8efb;">
+            <div style="padding: 20px; text-align: center;">
+                <div onclick="document.getElementById('edit-avatar-input').click()" style="width:100px; height:100px; border-radius:50%; background:#1a1a25; margin:0 auto 20px; overflow:hidden; border:2px solid #6e8efb; cursor:pointer;">
                     <img id="edit-img-preview" src="" style="width:100%; height:100%; object-fit:cover;">
                 </div>
                 <input type="file" id="edit-avatar-input" style="display:none;" accept="image/*">
                 <input type="text" id="edit-name-input" placeholder="Имя">
                 <input type="text" id="edit-username-input" placeholder="@username">
-                <button id="saveProfileBtn" style="width:100%; background: #28a745;">Сохранить изменения</button>
+                <button id="saveProfileBtn" style="width:100%; background:#28a745;">Сохранить</button>
             </div>
         </div>
     </div>
 
     <div id="delete-modal" class="modal" style="display:none;">
-        <div class="modal-content">
+<div class="modal-content">
             <h3>Удалить чат?</h3>
-            <button id="delete-mine-btn" style="width:100%; margin-bottom:10px; background:#444;">Удалить у себя</button>
-            <button id="delete-all-btn" style="width:100%; background:#ff4f4f;">Удалить у всех</button>
+            <button id="delete-mine-btn" style="width:100%; margin-bottom:10px; background:#444;">У себя</button>
+            <button id="delete-all-btn" style="width:100%; background:#ff4f4f;">У всех</button>
             <button onclick="closeModals()" style="background:none; color:#888; margin-top:10px;">Отмена</button>
-        </div>
-    </div>
-<div id="profile-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <img id="view-avatar" src="" style="width:100px; height:100px; border-radius:50%; object-fit:cover;">
-            <h3 id="view-name"></h3>
-            <p id="view-username" style="color:#6e8efb;"></p>
-            <p id="view-phone" style="color:#777;"></p>
-            <button onclick="closeModals()" style="width:100%; background:#444;">Закрыть</button>
         </div>
     </div>
 
