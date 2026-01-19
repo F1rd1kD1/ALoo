@@ -17,11 +17,8 @@ let isRegMode = false;
 
 window.onload = function() {
     currentUser = JSON.parse(localStorage.getItem('chat_user'));
-    if (currentUser) {
-        showApp();
-    }
+    if (currentUser) showApp();
 
-    // Переключатель Вход / Регистрация
     document.getElementById('toggleAuth').onclick = function() {
         isRegMode = !isRegMode;
         document.getElementById('auth-title').innerText = isRegMode ? "Регистрация" : "Вход";
@@ -30,76 +27,65 @@ window.onload = function() {
         document.getElementById('toggleAuth').innerText = isRegMode ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться";
     };
 
-    // Кнопка Входа или Регистрации
     document.getElementById('mainAuthBtn').onclick = async function() {
         const phone = document.getElementById('auth-phone').value.trim();
         const pass = document.getElementById('auth-pass').value.trim();
 
-        if (!phone || !pass) return alert("Заполните номер и пароль!");
+        if (!phone) return alert("Введите номер!");
 
         if (isRegMode) {
             const name = document.getElementById('reg-name').value.trim();
-            let username = document.getElementById('reg-username').value.trim().toLowerCase().replace('@','');
-            const avatar = document.getElementById('chosen-img').src;
+            let nick = document.getElementById('reg-username').value.trim().toLowerCase().replace('@','');
+            const ava = document.getElementById('chosen-img').src;
 
             if (!name) return alert("Введите имя!");
-
             const check = await database.ref('users/' + phone).once('value');
-            if (check.exists()) return alert("Этот номер уже занят!");
+            if (check.exists()) return alert("Номер уже зарегистрирован!");
 
             let userObj = {
-                name: name,
-                phone: phone,
-                pass: pass,
-                avatar: avatar.includes('data') ? avatar : '',
-                username: username ? '@' + username : ''
+                name: name, phone: phone, pass: pass,
+                avatar: ava.includes('data') ? ava : '',
+                username: nick ? '@' + nick : ''
             };
 
-            if (username) {
-                const nickCheck = await database.ref('usernames/' + username).once('value');
-                if (nickCheck.exists()) return alert("Этот никнейм занят!");
-                await database.ref('usernames/' + username).set(phone);
-            }
-
+            if (nick) await database.ref('usernames/' + nick).set(phone);
             await database.ref('users/' + phone).set(userObj);
             currentUser = userObj;
             saveAndShow();
         } else {
             const snap = await database.ref('users/' + phone).once('value');
-            if (!snap.exists()) return alert("Пользователь не найден!");
+            if (!snap.exists()) return alert("Аккаунт не найден!");
             const data = snap.val();
-            if (data.pass === pass) {
-                currentUser = data;
-                saveAndShow();
-            } else {
-                alert("Неверный пароль!");
+            // Проверка пароля только если он есть в базе
+            if (data.pass && data.pass !== "" && data.pass !== pass) {
+                return alert("Неверный пароль!");
             }
+            currentUser = data;
+            saveAndShow();
         }
     };
 
-    // Настройки
     document.getElementById('saveProfileBtn').onclick = async function() {
         const newName = document.getElementById('edit-name-input').value.trim();
         let newNick = document.getElementById('edit-username-input').value.trim().toLowerCase().replace('@','');
-        
+        let newPass = prompt("Установите пароль для защиты (или оставьте текущий):", currentUser.pass || "");
+
         if (newName) {
             if (newNick && ('@' + newNick !== currentUser.username)) {
                 const check = await database.ref('usernames/' + newNick).once('value');
-                if (check.exists()) return alert("Никнейм занят!");
-                if (currentUser.username) {
-                    await database.ref('usernames/' + currentUser.username.replace('@','')).remove();
-}
+                if (check.exists()) return alert("Ник занят!");
+                if (currentUser.username) await database.ref('usernames/' + currentUser.username.replace('@','')).remove();
                 await database.ref('usernames/' + newNick).set(currentUser.phone);
                 currentUser.username = '@' + newNick;
             }
-            
             currentUser.name = newName;
-            const newAva = document.getElementById('edit-img-preview').src;
-            if (newAva.includes('data')) currentUser.avatar = newAva;
-
-            await database.ref('users/' + currentUser.phone).update(currentUser);
+            currentUser.pass = newPass !== null ? newPass : (currentUser.pass || "");
+            const ava = document.getElementById('edit-img-preview').src;
+            if (ava.includes('data')) currentUser.avatar = ava;
+await database.ref('users/' + currentUser.phone).update(currentUser);
             saveAndShow();
             closeEditProfile();
+            alert("Обновлено!");
         }
     };
 
@@ -116,8 +102,7 @@ function handleImg(e, id) {
     const r = new FileReader();
     r.onload = ev => {
         const img = document.getElementById(id);
-        img.src = ev.target.result;
-        img.style.display = 'block';
+        img.src = ev.target.result; img.style.display = 'block';
         if (id === 'chosen-img') document.getElementById('plus-icon').style.display = 'none';
     };
     r.readAsDataURL(e.target.files[0]);
@@ -172,28 +157,16 @@ async function openChat(phone) {
     document.getElementById('chat-page').style.display = 'flex';
     document.getElementById('chatTitle').innerText = friend.name;
 
-    document.getElementById('clearChatBtn').onclick = function() {
-        document.getElementById('delete-modal').style.display = 'flex';
-        document.getElementById('delete-mine-btn').onclick = function() {
-            let cs = JSON.parse(localStorage.getItem('my_contacts') || "[]");
-            localStorage.setItem('my_contacts', JSON.stringify(cs.filter(x => x !== phone)));
-            backToContacts(); loadContacts(); closeModals();
-        };
-        document.getElementById('delete-all-btn').onclick = function() {
-            database.ref('chats/' + currentChatID).remove();
-            closeModals();
-        };
-    };
-const msgDiv = document.getElementById('messages');
+    const msgDiv = document.getElementById('messages');
     database.ref('chats/' + currentChatID).off();
     database.ref('chats/' + currentChatID).on('value', function(snap) {
         msgDiv.innerHTML = "";
         snap.forEach(function(c) {
             const v = c.val();
             const isMe = v.p === currentUser.phone;
-            const time = new Date(v.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             const b = document.createElement('div');
             b.className = "msg-bubble " + (isMe ? "my-msg" : "their-msg");
+            const time = new Date(v.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             b.innerHTML = '<div>' + v.m + '</div><span class="msg-time">' + time + '</span>';
             msgDiv.appendChild(b);
         });
@@ -209,7 +182,6 @@ function sendMessage() {
     }
 }
 document.getElementById('sendBtn').onclick = sendMessage;
-
 function openEditProfile() {
     document.getElementById('contacts-page').style.display = 'none';
     document.getElementById('edit-profile-page').style.display = 'flex';
