@@ -1,223 +1,368 @@
-const firebaseConfig = {
+// КОНФИГУРАЦИЯ FIREBASE
+var firebaseConfig = {
     apiKey: "AIzaSyAmKHf1fbcmXrCTKcZ_b-1EVv7JsN6y9C0",
     authDomain: "aloo-9633b.firebaseapp.com",
     databaseURL: "https://aloo-9633b-default-rtdb.firebaseio.com",
     projectId: "aloo-9633b",
     storageBucket: "aloo-9633b.firebasestorage.app",
     messagingSenderId: "865795470742",
-    appId: "1:865795470742:web:69cb9fe49a3fb69ce699b7"
+    appId: "1:865795470742:web:69cb9fe49a3fb69ce6999b7"
 };
 
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+firebase.initializeApp(firebaseConfig);
+var database = firebase.database();
 
-var currentUser, currentChatID, isRegMode = false, selectedMsgKey, typingTimeout;
+// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+var currentUser = null;
+var currentChatID = null;
+var isRegMode = false;
+var mediaRecorder = null;
+var audioChunks = [];
+var selectedMsgId = null;
+var isEditing = false;
+var replyData = null;
+var allMessages = [];
 
+// ПРИ ЗАГРУЗКЕ
 window.onload = function() {
-    currentUser = JSON.parse(localStorage.getItem('chat_user'));
-    if (currentUser) { showApp(); setUserOnline(); }
+    var saved = localStorage.getItem('chat_user');
+    if (saved) {
+        currentUser = JSON.parse(saved);
+        showApp();
+        setUserOnline();
+    }
 
+    // Слушатели кнопок
+    document.getElementById('mainAuthBtn').onclick = handleAuth;
+    document.getElementById('sendBtn').onclick = sendMessage;
+    document.getElementById('saveProfileBtn').onclick = saveProfile;
+    document.getElementById('addContactBtn').onclick = addContact;
+    document.getElementById('micBtn').onclick = toggleRecording;
+
+    // Переключатель регистрации
     document.getElementById('toggleAuth').onclick = function() {
         isRegMode = !isRegMode;
-        document.getElementById('auth-title').innerText = isRegMode ? "РЕГИСТРАЦИЯ" : "ВХОД";
+        document.getElementById('auth-title').innerText = isRegMode ? "РЕГИСТРАЦИЯ" : "ДОСТУП";
         document.getElementById('reg-fields').style.display = isRegMode ? "block" : "none";
-        this.innerText = isRegMode ? "Уже есть аккаунт? Войти" : "Создать аккаунт";
     };
 
-    document.getElementById('mainAuthBtn').onclick = async function() {
-        var phone = document.getElementById('auth-phone').value.trim();
-        var pass = document.getElementById('auth-pass').value.trim();
-        if(!phone) return alert("Введите номер");
-
-        if(isRegMode) {
-            var name = document.getElementById('reg-name').value.trim();
-            var nick = document.getElementById('reg-username').value.trim().toLowerCase().replace('@','');
-            var ava = document.getElementById('chosen-img').src;
-            if(!name) return alert("Введите имя");
-            currentUser = { 
-                name: name, 
-                phone: phone, 
-                pass: pass, 
-                avatar: (ava.indexOf('data') !== -1 ? ava : ''), 
-                username: (nick ? '@' + nick : '') 
-            };
-            await database.ref('users/' + phone).set(currentUser);
-            if(nick) await database.ref('usernames/' + nick).set(phone);
-            saveAndShow(); setUserOnline();
-        } else {
-            var s = await database.ref('users/' + phone).once('value');
-            if(!s.exists()) return alert("Нет такого пользователя");
-            if(s.val().pass !== pass) return alert("Неверный пароль!");
-            currentUser = s.val(); saveAndShow(); setUserOnline();
-        }
-    };
-
-    document.getElementById('messageInput').oninput = function() {
-        if(!currentChatID) return;
-        database.ref('typing/' + currentChatID + '/' + currentUser.phone).set(true);
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(function() { 
-            database.ref('typing/' + currentChatID + '/' + currentUser.phone).set(false); 
-        }, 2000);
-    };
-
-    document.getElementById('addContactBtn').onclick = async function() {
-        var inp = document.getElementById('search-input').value.trim().toLowerCase().replace('@','');
-        var sn = await database.ref('usernames/' + inp).once('value');
-        var ph = sn.exists() ? sn.val() : inp;
-        if(ph && ph !== currentUser.phone) {
-            var su = await database.ref('users/' + ph).once('value');
-            if(su.exists()) { addToContacts(ph); openChat(ph); document.getElementById('search-input').value = ""; }
-        }
-    };
-
-    document.getElementById('avatar-input').onchange = function(e) {
-        var r = new FileReader();
-        r.onload = function(ev) { document.getElementById('chosen-img').src = ev.target.result; };
-        r.readAsDataURL(e.target.files[0]);
-    };
-
+    // Фото в чат
     document.getElementById('chat-file-input').onchange = function(e) {
-        var r = new FileReader();
-        r.onload = function(ev) { 
-            database.ref('chats/' + currentChatID).push({ 
-                p: currentUser.phone, m: ev.target.result, t: Date.now(), s: 0, type: 'img' 
-            }); 
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+            var msg = {
+                p: currentUser.phone,
+                m: ev.target.result,
+                t: Date.now(),
+                type: 'img',
+                read: false
+            };
+            database.ref('chats/' + currentChatID).push(msg);
         };
-        r.readAsDataURL(e.target.files[0]);
-    };
-document.getElementById('sendBtn').onclick = sendMessage;
-    
-    document.getElementById('delete-all-btn').onclick = function() {
-        database.ref('chats/' + currentChatID + '/' + selectedMsgKey).remove();
-        document.getElementById('delete-modal').style.display = 'none';
+        reader.readAsDataURL(file);
     };
 
-    document.getElementById('clearChatBtn').onclick = function() { 
-        if(confirm("Очистить историю чата?")) database.ref('chats/' + currentChatID).remove(); 
-    };
+    // Функции меню сообщений
+    document.getElementById('btn-reply-msg').onclick = startReply;
+    document.getElementById('btn-edit-msg').onclick = startEdit;
+    document.getElementById('btn-burn-msg').onclick = makeBurning;
+    document.getElementById('btn-delete-msg').onclick = deleteMessage;
 };
 
-function setUserOnline() { 
-    var r = database.ref('status/' + currentUser.phone); 
-    r.set(true); 
-    r.onDisconnect().set(false); 
-}
-
-function addToContacts(p) {
-    var c = JSON.parse(localStorage.getItem('my_contacts') || "[]");
-    if(c.indexOf(p) === -1) { c.push(p); localStorage.setItem('my_contacts', JSON.stringify(c)); }
-}
-
-async function loadContacts() {
-    var list = document.getElementById('contacts-list'); 
-    list.innerHTML = "";
-    var cs = JSON.parse(localStorage.getItem('my_contacts') || "[]");
-    for(var i=0; i < cs.length; i++) {
-        var p = cs[i];
-        var s = await database.ref('users/' + p).once('value');
-        var ud = s.val(); if(!ud) continue;
+// АВТОРИЗАЦИЯ
+function handleAuth() {
+    var ph = document.getElementById('auth-phone').value.trim();
+    var ps = document.getElementById('auth-pass').value.trim();
+    
+    if (isRegMode) {
+        var nick = document.getElementById('reg-username').value.trim().toLowerCase().replace('@','');
+        if (!nick || !ph) return alert("Заполните поля!");
         
-        var d = document.createElement('div'); 
-        d.className = "contact-item";
-        
-        var imgUrl = ud.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
-        var dot = document.createElement('div'); 
-        dot.className = "online-dot";
-        
-        (function(phone, el){ 
-            database.ref('status/' + phone).on('value', function(snap) { 
-                el.style.display = snap.val() ? 'block' : 'none'; 
-            }); 
-        })(p, dot);
-        
-        d.innerHTML = '<img src="' + imgUrl + '"><div style="margin-left:10px"><b>' + ud.name + '</b><br><small>' + (ud.username || p) + '</small></div>';
-        d.appendChild(dot);
-        (function(phone){ d.onclick = function() { openChat(phone); }; })(p);
-        list.appendChild(d);
+        database.ref('usernames/' + nick).once('value').then(snap => {
+            if (snap.exists()) return alert("Никнейм занят!");
+            
+            currentUser = {
+                name: document.getElementById('reg-name').value || nick,
+                phone: ph,
+                pass: ps,
+                username: "@" + nick,
+                avatar: document.getElementById('chosen-img').src,
+                contacts: []
+            };
+            
+            database.ref('users/' + ph).set(currentUser);
+            database.ref('usernames/' + nick).set(ph);
+            saveAndShow();
+        });
+    } else {
+        database.ref('users/' + ph).once('value').then(snap => {
+            if (snap.exists() && snap.val().pass === ps) {
+                currentUser = snap.val();
+                saveAndShow();
+            } else {
+                alert("Ошибка входа!");
+            }
+        });
     }
 }
 
-async function openChat(p) {
-    var s = await database.ref('users/' + p).once('value');
-    currentChatID = [currentUser.phone, p].sort().join("_");
-    document.getElementById('contacts-page').style.display = 'none';
-    document.getElementById('chat-page').style.display = 'flex';
-    document.getElementById('chatTitle').innerText = s.val().name;
-
-    database.ref('status/' + p).on('value', function(snap) { 
-        document.getElementById('online-status-text').style.display = snap.val() ? 'block' : 'none'; 
-    });
-
-    database.ref('typing/' + currentChatID + '/' + p).on('value', function(snap) {
-        var t = snap.val(); 
-        document.getElementById('typing-indicator').style.display = t ? 'block' : 'none';
-        if(t) document.getElementById('online-status-text').style.display = 'none';
-    });
-
-    database.ref('chats/' + currentChatID).off();
-    database.ref('chats/' + currentChatID).on('value', function(snap) {
-        var box = document.getElementById('messages'); 
-        box.innerHTML = "";
-        snap.forEach(function(c) {
-            var v = c.val(); 
-            var isMe = v.p === currentUser.phone;
-            if(!isMe && v.s === 0) database.ref('chats/' + currentChatID + '/' + c.key).update({ s: 1 });
-            
-            var b = document.createElement('div'); 
-            b.className = "msg-bubble " + (isMe ? "my-msg" : "their-msg");
-            
-            var time = new Date(v.t); 
-            var ts = time.getHours() + ":" + (time.getMinutes() < 10 ? '0' : '') + time.getMinutes();
-            
-            var content = "";
-            if(v.type === 'img') {
-                content = '<img class="chat-img" src="' + v.m + '" onclick="window.open(this.src)">';
-            } else {
-                content = '<div>' + v.m + '</div>';
-            }
-            
-            var statusIcon = isMe ? '<span>' + (v.s === 1 ? '✓✓' : '✓') + '</span>' : '';
-b.innerHTML = content + '<div class="msg-info"><span>' + ts + '</span>' + statusIcon + '</div>';
-            
-            b.onclick = function() { if(isMe) { selectedMsgKey = c.key; document.getElementById('delete-modal').style.display='flex'; } };
-            box.appendChild(b);
+// РАБОТА С ЧАТОМ
+function openChat(targetPhone) {
+    currentChatID = [currentUser.phone, targetPhone].sort().join("_");
+    
+    database.ref('users/' + targetPhone).once('value').then(snap => {
+        var ud = snap.val();
+        document.getElementById('chatTitle').innerText = ud.name;
+        document.getElementById('chat-avatar-display').src = ud.avatar;
+        switchPage('contacts-page', 'chat-page');
+        
+        // Статус онлайн
+        database.ref('status/' + targetPhone).on('value', s => {
+            document.getElementById('online-status-text').innerText = s.val() ? "в сети" : "был недавно";
         });
-        box.scrollTop = box.scrollHeight;
+
+        // Загрузка сообщений
+        database.ref('chats/' + currentChatID).on('value', snapMessages => {
+            allMessages = [];
+            snapMessages.forEach(c => {
+                var m = c.val();
+                m.id = c.key;
+                // Проверка сгорания
+                if (m.burnAt && Date.now() > m.burnAt) {
+                    database.ref('chats/' + currentChatID + '/' + m.id).remove();
+                } else {
+                    allMessages.push(m);
+                }
+            });
+            renderMessages("");
+            markAsRead();
+        });
     });
-    addToContacts(p);
+}
+
+function renderMessages(query) {
+    var box = document.getElementById('messages');
+    box.innerHTML = "";
+    
+    allMessages.forEach(v => {
+        if (query && v.type === 'text' && !v.m.toLowerCase().includes(query)) return;
+        
+        var isMe = v.p === currentUser.phone;
+        var div = document.createElement('div');
+        div.className = "msg-bubble " + (isMe ? "my-msg" : "their-msg");
+        
+        div.onclick = function() {
+            selectedMsgId = v.id;
+            document.getElementById('msg-menu').style.display = 'flex';
+        };
+
+        var content = "";
+        if (v.type === 'img') {
+            content = `<img src="${v.m}" style="max-width:100%; border-radius:10px;">`;
+        } else if (v.type === 'audio') {
+            content = `<audio controls src="${v.m}" style="width:180px; filter:invert(1);"></audio>`;
+        } else {
+            content = `<div>${v.m}</div>`;
+        }
+
+        var time = new Date(v.t);
+        var ts = time.getHours() + ":" + (time.getMinutes() < 10 ? '0' : '') + time.getMinutes();
+        var ticks = isMe ? `<span style="font-size:10px; margin-left:5px; color:${v.read?'#00d4ff':'#555'}">✓${v.read?'✓':''}</span>` : "";
+
+        div.innerHTML = content + `<div style="display:flex; justify-content:flex-end; font-size:9px; opacity:0.5; margin-top:4px;">${v.burnAt?'🔥 ':''}${ts}${ticks}</div>`;
+        box.appendChild(div);
+    });
+    
+    // Всегда скроллим вниз при открытии
+    box.scrollTop = box.scrollHeight;
 }
 
 function sendMessage() {
-    var i = document.getElementById('messageInput');
-    if(i.value.trim()) {
-        database.ref('chats/' + currentChatID).push({ p: currentUser.phone, m: i.value, t: Date.now(), s: 0 });
-        database.ref('typing/' + currentChatID + '/' + currentUser.phone).set(false);
-        i.value = "";
+    var inp = document.getElementById('messageInput');
+    if (!inp.value.trim()) return;
+
+    if (isEditing) {
+        database.ref('chats/' + currentChatID + '/' + selectedMsgId).update({ m: inp.value, edited: true });
+        isEditing = false;
+    } else {
+        var msg = {
+            p: currentUser.phone,
+            m: inp.value,
+            t: Date.now(),
+            type: 'text',
+            read: false
+        };
+        if (replyData) {
+            msg.reply = replyData;
+            cancelReply();
+        }
+        database.ref('chats/' + currentChatID).push(msg);
     }
+    inp.value = "";
 }
 
-function showApp() { 
-    document.getElementById('auth-screen').style.display = 'none'; 
-    document.getElementById('main-app').style.display = 'block'; 
-    document.getElementById('my-avatar-display').src = currentUser.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+// ПОИСК КОНТАКТА
+function addContact() {
+    var val = document.getElementById('search-input').value.trim().toLowerCase().replace('@','');
+    database.ref('usernames/' + val).once('value').then(sn => {
+        if (sn.exists()) {
+            var ph = sn.val();
+            var contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
+            if (!contacts.includes(ph)) {
+                contacts.push(ph);
+                localStorage.setItem('my_contacts', JSON.stringify(contacts));
+            }
+            openChat(ph);
+        } else {
+            alert("Пользователь не найден!");
+        }
+    });
+}
+
+function loadContacts() {
+    var list = document.getElementById('contacts-list');
+    list.innerHTML = "";
+    var contacts = JSON.parse(localStorage.getItem('my_contacts') || "[]");
+    
+    contacts.forEach(ph => {
+        database.ref('users/' + ph).once('value').then(snap => {
+            var u = snap.val();
+            var d = document.createElement('div');
+            d.style = "padding:15px; display:flex; align-items:center; border-bottom:1px solid #111; cursor:pointer;";
+            d.innerHTML = `<img src="${u.avatar}" class="mini-ava" style="margin-right:15px;"><b>${u.name}</b>`;
+            d.onclick = function() { openChat(ph); };
+            list.appendChild(d);
+        });
+    });
+}
+
+// ПРОФИЛЬ
+function openProfile() {
+    document.getElementById('edit-name').value = currentUser.name;
+    document.getElementById('edit-pass').value = currentUser.pass;
+    document.getElementById('edit-avatar-preview').src = currentUser.avatar;
+    switchPage('contacts-page', 'profile-page');
+}
+
+function saveProfile() {
+    currentUser.name = document.getElementById('edit-name').value;
+    currentUser.pass = document.getElementById('edit-pass').value;
+    currentUser.avatar = document.getElementById('edit-avatar-preview').src;
+    
+    database.ref('users/' + currentUser.phone).update(currentUser).then(() => {
+        localStorage.setItem('chat_user', JSON.stringify(currentUser));
+        alert("Сохранено!");
+        switchPage('profile-page', 'contacts-page');
+        showApp();
+    });
+}
+
+// ВСПОМОГАТЕЛЬНОЕ
+function showApp() {
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+    document.getElementById('my-avatar-display').src = currentUser.avatar;
     document.getElementById('my-name-display').innerText = currentUser.name;
-    loadContacts(); 
+    loadContacts();
 }
 
-function saveAndShow() { 
-    localStorage.setItem('chat_user', JSON.stringify(currentUser)); 
-    showApp(); 
+function saveAndShow() {
+    localStorage.setItem('chat_user', JSON.stringify(currentUser));
+    showApp();
 }
 
-function backToContacts() { 
-    document.getElementById('chat-page').style.display = 'none'; 
-    document.getElementById('contacts-page').style.display = 'flex'; 
-    loadContacts(); 
+function switchPage(oldP, newP) {
+    document.getElementById(oldP).style.display = 'none';
+    document.getElementById(newP).style.display = 'flex';
 }
 
-function logout() { 
-    if(currentUser) database.ref('status/' + currentUser.phone).set(false); 
-    localStorage.clear(); 
-    location.reload(); 
+function backToContacts() {
+    switchPage('chat-page', 'contacts-page');
+    loadContacts();
+}
+
+function logout() {
+    localStorage.clear();
+    location.reload();
+}
+
+function setUserOnline() {
+    var r = database.ref('status/' + currentUser.phone);
+    r.set(true);
+    r.onDisconnect().set(false);
+}
+
+function markAsRead() {
+    allMessages.forEach(m => {
+        if (m.p !== currentUser.phone && !m.read) {
+            database.ref('chats/' + currentChatID + '/' + m.id).update({ read: true });
+        }
+    });
+}
+
+// ФУНКЦИИ СООБЩЕНИЙ
+function closeMsgMenu() { document.getElementById('msg-menu').style.display = 'none'; }
+
+function startReply() {
+    var m = allMessages.find(x => x.id === selectedMsgId);
+    replyData = { text: m.m };
+    document.getElementById('reply-text').innerText = m.m;
+    document.getElementById('reply-preview').style.display = 'block';
+    closeMsgMenu();
+}
+
+function cancelReply() {
+    replyData = null;
+    document.getElementById('reply-preview').style.display = 'none';
+}
+
+function startEdit() {
+    var m = allMessages.find(x => x.id === selectedMsgId);
+    if (m.p !== currentUser.phone) return alert("Нельзя редактировать чужое!");
+    document.getElementById('messageInput').value = m.m;
+    isEditing = true;
+    closeMsgMenu();
+}
+
+function deleteMessage() {
+    database.ref('chats/' + currentChatID + '/' + selectedMsgId).remove();
+    closeMsgMenu();
+}
+
+function makeBurning() {
+    database.ref('chats/' + currentChatID + '/' + selectedMsgId).update({ burnAt: Date.now() + 30000 });
+    closeMsgMenu();
+}
+
+// ГОЛОСОВЫЕ
+async function toggleRecording() {
+    if (!mediaRecorder) {
+        var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+            var blob = new Blob(audioChunks, { type: 'audio/webm' });
+            var reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                database.ref('chats/' + currentChatID).push({
+                    p: currentUser.phone,
+                    m: reader.result,
+                    t: Date.now(),
+                    type: 'audio',
+                    read: false
+                });
+            };
+        };
+    }
+    if (mediaRecorder.state === 'inactive') {
+        audioChunks = [];
+        mediaRecorder.start();
+        document.getElementById('micBtn').style.color = 'red';
+    } else {
+        mediaRecorder.stop();
+        document.getElementById('micBtn').style.color = 'white';
+    }
 }
