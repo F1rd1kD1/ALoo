@@ -2,68 +2,113 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Neon Stealth Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="auth-screen" class="auth-container">
-        <h2 id="auth-title">ВХОД</h2>
+        <h2 id="auth-title" class="cyber-title">ДОСТУП</h2>
         <div id="reg-fields" style="display:none;">
             <div class="avatar-wrapper" onclick="document.getElementById('avatar-input').click()">
                 <img id="chosen-img" src="https://cdn-icons-png.flaticon.com/512/149/149071.png">
+                <div class="edit-hint">ФОТО</div>
             </div>
             <input type="file" id="avatar-input" style="display:none;" accept="image/*">
             <input type="text" id="reg-name" placeholder="Ваше имя">
-            <input type="text" id="reg-username" placeholder="@username">
+            <input type="text" id="reg-username" placeholder="@username (обязательно)">
         </div>
         <input type="text" id="auth-phone" placeholder="Номер телефона">
         <input type="password" id="auth-pass" placeholder="Пароль">
-        <button id="mainAuthBtn">ПОДТВЕРДИТЬ</button>
-        <p id="toggleAuth" style="cursor:pointer; margin-top:15px; font-size:14px; color:#6e8efb;">Создать аккаунт</p>
+        <button id="mainAuthBtn" class="cyber-btn">ПОДТВЕРДИТЬ</button>
+        <p id="toggleAuth" class="auth-toggle">Создать аккаунт</p>
     </div>
 
     <div id="main-app" style="display:none;">
         <div id="contacts-page" class="page">
             <div class="header">
-                <img id="my-avatar-display" class="mini-ava" src="">
-                <span id="my-name-display" style="flex:1; margin-left:10px; font-weight:bold;"></span>
+                <img id="my-avatar-display" class="mini-ava neon-glow" src="" onclick="openProfile()">
+                <span id="my-name-display" class="cyber-title" style="flex:1; margin-left:15px;"></span>
+                <button onclick="openProfile()" class="icon-btn">⚙️</button>
                 <button onclick="logout()" class="icon-btn">🚪</button>
             </div>
-            <div class="search-bar">
-                <input type="text" id="search-input" placeholder="Поиск @username или номер">
-                <button id="addContactBtn">🔍</button>
+            <div class="search-container">
+                <div class="search-bar">
+                    <input type="text" id="search-input" placeholder="Поиск @username...">
+                    <button id="addContactBtn" class="search-btn">НАЙТИ</button>
+                </div>
             </div>
             <div id="contacts-list"></div>
         </div>
 
+        <div id="profile-page" class="page" style="display:none;">
+            <div class="header neon-bottom">
+                <button onclick="switchPage('profile-page', 'contacts-page')" class="icon-btn">⬅️</button>
+                <span class="cyber-title" style="margin-left:15px;">УПРАВЛЕНИЕ УЗЛОМ</span>
+            </div>
+            <div class="profile-content">
+                <div class="profile-card neon-glow">
+                    <div class="profile-avatar-container">
+                        <img id="edit-avatar-preview" class="big-ava-neon" src="" onclick="document.getElementById('edit-avatar-input').click()">
+                        <div class="change-label">СМЕНИТЬ ВИД</div>
+                    </div>
+                    <input type="file" id="edit-avatar-input" style="display:none;" accept="image/*">
+                    
+                    <div class="cyber-input-group">
+                        <label>ИДЕНТИФИКАТОР (ИМЯ)</label>
+                        <input type="text" id="edit-name" spellcheck="false">
+                    </div>
+                    <div class="cyber-input-group">
+                        <label>ЦИФРОВОЙ ПСЕВДОНИМ</label>
+                        <input type="text" id="edit-username" readonly style="color:#444;">
+                    </div>
+                    <div class="cyber-input-group">
+                        <label>КЛЮЧ ДОСТУПА (ПАРОЛЬ)</label>
+                        <input type="password" id="edit-pass">
+                    </div>
+                    
+                    <button id="saveProfileBtn" class="cyber-btn save-neon">СИНХРОНИЗИРОВАТЬ</button>
+                </div>
+            </div>
+        </div>
+
         <div id="chat-page" class="page" style="display:none;">
-            <div class="header">
+            <div class="header neon-bottom">
                 <button onclick="backToContacts()" class="icon-btn">⬅️</button>
-                <div class="chat-info">
-                    <span id="chatTitle">Чат</span>
-                    <div class="status-row">
-                        <span id="online-status-text">в сети</span>
-                        <span id="typing-indicator">печатает...</span>
+                <div id="chat-header-info" style="display:flex; align-items:center; flex:1; overflow:hidden;">
+                    <img id="chat-avatar-display" class="mini-ava" style="margin-left:8px;">
+                    <div style="margin-left:10px; flex:1;">
+                        <span id="chatTitle" style="font-weight:bold; display:block;">Чат</span>
+                        <span id="online-status-text" style="font-size:10px; color:#00ff88;"></span>
                     </div>
                 </div>
-                <button id="clearChatBtn" class="icon-btn">🗑</button>
+                <button id="open-search-btn" onclick="showMsgSearch()" class="icon-btn">🔍</button>
             </div>
             <div id="messages"></div>
+            <div id="reply-preview">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#00d4ff; font-weight:bold; font-size:11px;">ОТВЕТ</span>
+                    <span onclick="cancelReply()" style="cursor:pointer;">✕</span>
+                </div>
+                <div id="reply-text" style="font-size:12px; color:#666;"></div>
+            </div>
             <div class="input-area">
                 <button onclick="document.getElementById('chat-file-input').click()" class="icon-btn">📎</button>
                 <input type="file" id="chat-file-input" style="display:none;" accept="image/*">
-                <input type="text" id="messageInput" placeholder="Сообщение...">
-                <button id="sendBtn">➤</button>
+                <input type="text" id="messageInput" placeholder="Введите сообщение..." autocomplete="off">
+                <button id="micBtn" class="icon-btn">🎤</button>
+                <button id="sendBtn" class="icon-btn">➤</button>
             </div>
         </div>
     </div>
 
-    <div id="delete-modal" class="modal" style="display:none;">
+    <div id="msg-menu" class="modal" style="display:none;">
         <div class="modal-content">
-            <h3>Удалить?</h3>
-            <button id="delete-all-btn" class="danger-btn">Удалить у всех</button>
-            <button onclick="document.getElementById('delete-modal').style.display='none'" class="cancel-btn">Отмена</button>
+            <button id="btn-reply-msg">Ответить</button>
+            <button id="btn-edit-msg">Редактировать</button>
+            <button id="btn-burn-msg" style="color:#ffcc00;">🔥 Сгорающее</button>
+            <button id="btn-delete-msg" style="color:#ff3b30;">Удалить</button>
+            <button onclick="closeMsgMenu()">Отмена</button>
         </div>
     </div>
 
