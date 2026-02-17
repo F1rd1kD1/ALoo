@@ -3,20 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Messenger Pro</title>
+    <title>Neon Messenger V2</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div id="auth-modal" class="modal" style="display: flex;">
         <div class="modal-content" style="text-align: center;">
-            <h2 style="margin-bottom:20px;">Вход</h2>
+            <h2 style="margin-bottom:20px; color: var(--accent); text-shadow: 0 0 15px var(--accent-glow);">NEON CHAT</h2>
+            
             <div id="reg-fields" style="display:none;">
-                <input type="text" id="reg-username" class="form-input" placeholder="@username">
-                <input type="text" id="reg-name" class="form-input" placeholder="Имя">
+                <input type="text" id="reg-username" class="form-input" placeholder="@username (уникальный)">
+                <input type="text" id="reg-name" class="form-input" placeholder="Ваше Имя">
             </div>
-            <input type="text" id="auth-phone" class="form-input" placeholder="Телефон" style="margin-bottom:10px;">
-            <input type="password" id="auth-pass" class="form-input" placeholder="Пароль" style="margin-bottom:10px;">
+
+            <input type="text" id="auth-phone" class="form-input" placeholder="Номер телефона (Логин)">
+            <input type="password" id="auth-pass" class="form-input" placeholder="Пароль">
+            
             <button onclick="handleAuth()" class="btn-primary" id="auth-btn">ВОЙТИ</button>
             <p onclick="toggleAuth()" style="margin-top:15px; font-size:13px; color:var(--text-secondary); cursor:pointer;" id="auth-toggle">Нет аккаунта? Создать</p>
         </div>
@@ -27,8 +30,8 @@
             <span class="ctx-emoji" onclick="addReaction('❤️')">❤️</span>
             <span class="ctx-emoji" onclick="addReaction('👍')">👍</span>
             <span class="ctx-emoji" onclick="addReaction('😂')">😂</span>
-            <span class="ctx-emoji" onclick="addReaction('😮')">😮</span>
-            <span class="ctx-emoji" onclick="addReaction('😢')">😢</span>
+            <span class="ctx-emoji" onclick="addReaction('🔥')">🔥</span>
+            <span class="ctx-emoji" onclick="addReaction('😭')">😭</span>
         </div>
         <div class="ctx-item" onclick="replyMsg()">↩️ Ответить</div>
         <div class="ctx-item" onclick="copyMsg()">📋 Копировать</div>
@@ -42,28 +45,40 @@
         <div class="modal-content">
             <h3>Переслать сообщение</h3>
             <div id="forward-list" class="contacts-list" style="max-height: 300px; margin-top:10px;"></div>
-            <button onclick="document.getElementById('forward-modal').style.display='none'" class="btn-primary" style="background:transparent; border:1px solid #555;">Отмена</button>
+            <button onclick="document.getElementById('forward-modal').style.display='none'" class="btn-primary" style="background:transparent; border:1px solid #555; color: white;">Отмена</button>
         </div>
     </div>
 
     <div id="profile-modal" class="modal">
         <div class="modal-content">
-            <div style="display:flex; justify-content:space-between;">
-                <h3>Профиль</h3>
-                <span onclick="document.getElementById('profile-modal').style.display='none'" style="cursor:pointer;">✕</span>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 15px;">
+                <h3 style="color: var(--accent);">Профиль</h3>
+                <span onclick="document.getElementById('profile-modal').style.display='none'" style="cursor:pointer; font-size: 24px;">&times;</span>
             </div>
+            
             <div style="text-align:center; margin:15px 0;">
-                <img id="edit-ava-preview" src="" class="avatar" style="width:80px; height:80px;">
-                <button onclick="document.getElementById('ava-upload').click()" style="display:block; margin:5px auto; background:none; border:none; color:var(--accent); cursor:pointer;">Изменить фото</button>
+                <img id="edit-ava-preview" src="" class="avatar" style="width:100px; height:100px;">
+                <button onclick="document.getElementById('ava-upload').click()" style="display:block; margin:10px auto; background:none; border:none; color:var(--accent); cursor:pointer; text-decoration: underline;">Изменить фото</button>
                 <input type="file" id="ava-upload" hidden accept="image/*">
             </div>
+
+            <label class="form-label" style="font-size:12px; color:#aaa;">Username</label>
             <input type="text" id="edit-username" class="form-input" placeholder="@username">
+            
+            <label class="form-label" style="font-size:12px; color:#aaa; margin-top:10px; display:block;">Имя</label>
             <input type="text" id="edit-name" class="form-input" placeholder="Имя">
+            
+            <label class="form-label" style="font-size:12px; color:#aaa; margin-top:10px; display:block;">Фамилия</label>
             <input type="text" id="edit-lastname" class="form-input" placeholder="Фамилия">
-            <input type="date" id="edit-birth" class="form-input" placeholder="День рождения">
-            <textarea id="edit-bio" class="form-textarea" placeholder="О себе..."></textarea>
-            <button onclick="saveProfile()" class="btn-primary">Сохранить</button>
-            <button onclick="logout()" class="btn-logout">ВЫХОД</button>
+            
+            <label class="form-label" style="font-size:12px; color:#aaa; margin-top:10px; display:block;">Дата рождения</label>
+            <input type="date" id="edit-birth" class="form-input">
+            
+            <label class="form-label" style="font-size:12px; color:#aaa; margin-top:10px; display:block;">О себе</label>
+            <textarea id="edit-bio" class="form-textarea" placeholder="Расскажите о себе..."></textarea>
+            
+            <button onclick="saveProfile()" class="btn-primary">СОХРАНИТЬ</button>
+            <button onclick="logout()" class="btn-logout">ВЫЙТИ ИЗ АККАУНТА</button>
         </div>
     </div>
 
@@ -73,7 +88,10 @@
             <div class="header">
                 <div class="user-info" onclick="openProfile()">
                     <img id="my-ava" src="" class="avatar">
-                    <span id="my-name-display" class="user-name"></span>
+                    <div style="display:flex; flex-direction:column;">
+                        <span id="my-name-display" class="user-name"></span>
+                        <span style="font-size: 11px; color: var(--accent);">Мой профиль</span>
+                    </div>
                 </div>
             </div>
             <div class="search-box">
@@ -83,14 +101,17 @@
         </div>
 
         <div id="chat-area" class="chat-area">
-            <div id="chat-placeholder" style="margin:auto; text-align:center; color:#555;">Выберите чат</div>
+            <div id="chat-placeholder" style="margin:auto; text-align:center; color:#555;">
+                <h2 style="color: var(--accent); margin-bottom: 10px; text-shadow: 0 0 10px var(--accent-glow);">Добро пожаловать</h2>
+                <p>Выберите чат или найдите друга через поиск</p>
+            </div>
             
             <div id="chat-interface" style="display:none; flex-direction:column; height:100%;">
                 <div class="header">
                     <div style="display:flex; align-items:center;">
                         <button onclick="closeChat()" class="icon-btn" style="margin-right:10px; display:block;">⬅</button>
                         <img id="partner-ava" src="" class="avatar">
-                        <div style="margin-left:10px;">
+                        <div style="margin-left:12px;">
                             <div id="partner-name" class="user-name"></div>
                             <div id="partner-status" class="user-status"></div>
                         </div>
@@ -98,11 +119,14 @@
                 </div>
 
                 <div id="pinned-msg-bar" class="pinned-container" onclick="scrollToPinned()">
-                    <div>
-                        <b style="font-size:11px;">📌 Закрепленное сообщение</b>
-                        <div id="pinned-text" style="color:var(--text-main); text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 200px;"></div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:16px;">📌</span>
+                        <div>
+                            <b style="font-size:11px; display:block;">Закрепленное сообщение</b>
+                            <div id="pinned-text" style="color:#ccc; font-size:12px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 200px;"></div>
+                        </div>
                     </div>
-                    <span onclick="event.stopPropagation(); unpinMsg()" style="padding:5px;">✕</span>
+                    <span onclick="event.stopPropagation(); unpinMsg()" style="padding:5px; cursor:pointer;">&times;</span>
                 </div>
 
                 <div id="messages" class="messages-list"></div>
@@ -110,18 +134,23 @@
                 <div class="input-area">
                     <div id="reply-bar" class="reply-preview-bar">
                         <div style="font-size:12px;">
-                            <div style="color:var(--accent);">Ответ на сообщение</div>
-                            <div id="reply-text-preview" style="color:#ccc;">Текст...</div>
+                            <div style="color:var(--accent); font-weight:bold;">Ответ на сообщение</div>
+                            <div id="reply-text-preview" style="color:#ccc;">...</div>
                         </div>
-                        <span onclick="cancelReply()" style="cursor:pointer; padding:5px;">✕</span>
+                        <span onclick="cancelReply()" style="cursor:pointer; padding:5px;">&times;</span>
                     </div>
 
                     <div class="input-row">
                         <input type="file" id="media-input" hidden accept="image/*">
-                        <button onclick="document.getElementById('media-input').click()" class="icon-btn">📎</button>
-                        <input type="text" id="msg-input" class="search-input" placeholder="Сообщение...">
-                        <button id="mic-btn" class="icon-btn">🎤</button>
-                        <button onclick="sendMsg()" class="icon-btn" style="color:var(--accent);">➤</button>
+                        <button onclick="document.getElementById('media-input').click()" class="icon-btn" title="Отправить фото">📷</button>
+                        
+                        <input type="file" id="video-input" hidden accept="video/*">
+                        <button onclick="document.getElementById('video-input').click()" class="icon-btn" title="Отправить видео">🎥</button>
+                        
+                        <input type="text" id="msg-input" class="search-input" placeholder="Сообщение..." autocomplete="off">
+                        
+                        <button id="mic-btn" class="icon-btn" title="Голосовое">🎤</button>
+                        <button onclick="sendMsg()" class="icon-btn" style="color:var(--accent);" title="Отправить">➤</button>
                     </div>
                 </div>
             </div>
