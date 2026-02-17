@@ -12,6 +12,14 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// --- ВЕРСИЯ ДАННЫХ (СБРОС) ---
+// Меняем пути на v2, чтобы "удалить" старые данные для пользователей этого кода
+const DB_USERS = 'users_v2';
+const DB_CHATS = 'chats_v2';
+const DB_USERNAMES = 'usernames_v2';
+const DB_STATUS = 'status_v2';
+const DB_TYPING = 'typing_v2';
+
 // --- STATE ---
 let user = null;
 let currentChatID = null;
@@ -19,18 +27,24 @@ let partnerUser = null;
 let isReg = false;
 let mediaRecorder, audioChunks = [];
 let typingTimeout;
+let lastRenderedDate = null;
+let contactsListener = null;
 
-// Для контекстных действий
+// Context Action States
 let selectedMsgID = null;
 let selectedMsgData = null;
 let replyToID = null;
 
 // --- INIT ---
 window.onload = function() {
-    const saved = localStorage.getItem('pro_messenger_user');
+    const saved = localStorage.getItem('pro_messenger_user_v2'); // New local storage key
     if (saved) {
-        user = JSON.parse(saved);
-        initApp();
+        try {
+            user = JSON.parse(saved);
+            initApp();
+        } catch(e) {
+            localStorage.removeItem('pro_messenger_user_v2');
+        }
     }
     
     // Listeners
@@ -40,14 +54,21 @@ window.onload = function() {
     };
     
     document.getElementById('search-inp').onchange = searchGlobal;
-    document.getElementById('media-input').onchange = handleFile;
+    document.getElementById('media-input').onchange = handleImage;
+    document.getElementById('video-input').onchange = handleVideo;
     document.getElementById('ava-upload').onchange = handleAva;
     
+    // Mic listeners
     const mic = document.getElementById('mic-btn');
-    mic.onmousedown = startRec; mic.onmouseup = stopRec;
-    mic.ontouchstart = startRec; mic.ontouchend = stopRec;
+    // Mouse
+    mic.onmousedown = startRec; 
+    mic.onmouseup = stopRec;
+    mic.onmouseleave = stopRec; // Stop if mouse leaves button
+    // Touch
+    mic.ontouchstart = (e) => { e.preventDefault(); startRec(); };
+    mic.ontouchend = (e) => { e.preventDefault(); stopRec(); };
 
-    // Скрытие контекстного меню
+    // Close menus on click outside
     document.onclick = (e) => {
         if (!e.target.closest('.context-menu') && !e.target.closest('.message')) {
             document.getElementById('ctx-menu').style.display = 'none';
@@ -64,61 +85,166 @@ function toggleAuth() {
 }
 
 async function handleAuth() {
-    const ph = document.getElementById('auth-phone').value;
-    const ps = document.getElementById('auth-pass').value;
-    if(!ph || !ps) return;
+    const ph = document.getElementById('auth-phone').value.trim();
+    const ps = document.getElementById('auth-pass').value.trim();
+    if(!ph || !ps) return alert("Введите телефон и пароль");
 
     if (isReg) {
-        const nick = document.getElementById('reg-username').value.toLowerCase().replace('@','');
-        const name = document.getElementById('reg-name').value;
-        const check = await db.ref('usernames/'+nick).once('value');
-        if(check.exists()) return alert('Ник занят!');
+        // REGISTRATION
+        const nickRaw = document.getElementById('reg-username').value.trim();
+        const name = document.getElementById('reg-name').value.trim();
+        
+        if (!nickRaw || !name) return alert("Заполните все поля");
+        
+        const nick = nickRaw.toLowerCase().replace('@','');
+        
+        // Check uniqueness
+        const check = await db.ref(DB_USERNAMES+'/'+nick).once('value');
+        if(check.exists()) return alert('Этот Username уже занят!');
 
-        user = { phone: ph, pass: ps, username: '@'+nick, firstName: name, avatar: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', bio: '' };
-        await db.ref('users/'+ph).set(user);
-        await db.ref('usernames/'+nick).set(ph);
+        const newUser = { 
+            phone: ph, 
+            pass: ps, 
+            username: '@'+nick, 
+            firstName: name, 
+            lastName: '',
+            avatar: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', 
+            bio: '',
+            birthdate: ''
+        };
+
+        await db.ref(DB_USERS+'/'+ph).set(newUser);
+        await db.ref(DB_USERNAMES+'/'+nick).set(ph);
+        
+        user = newUser;
     } else {
-        const s = await db.ref('users/'+ph).once('value');
-        if(!s.exists() || s.val().pass !== ps) return alert('Ошибка!');
-        user = s.val();
+        // LOGIN
+        const s = await db.ref(DB_USERS+'/'+ph).once('value');
+        if(!s.exists()) return alert('Аккаунт не найден. Зарегистрируйтесь.');
+        
+        const data = s.val();
+        if(data.pass !== ps) return alert('Неверный пароль!');
+        user = data;
     }
-    localStorage.setItem('pro_messenger_user', JSON.stringify(user));
+    
+    localStorage.setItem('pro_messenger_user_v2', JSON.stringify(user));
     initApp();
 }
 
-function logout() { localStorage.clear(); location.reload(); }
+function logout() {
+    if(confirm("Выйти из аккаунта?")) {
+        localStorage.removeItem('pro_messenger_user_v2');
+        location.reload();
+    }
+}
 
 // --- APP START ---
 function initApp() {
     document.getElementById('auth-modal').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
-    document.getElementById('my-name-display').innerText = user.firstName;
-    document.getElementById('my-ava').src = user.avatar;
     
-    // Tracking Online
-    const statusRef = db.ref('status/' + user.phone);
+    updateMyUI();
+    
+    // Online tracking
+    const statusRef = db.ref(DB_STATUS+'/' + user.phone);
     statusRef.onDisconnect().set(Date.now());
     statusRef.set('online');
-    setInterval(() => statusRef.set('online'), 10000);
+    setInterval(() => statusRef.set('online'), 10000); // Heartbeat
     
     loadContacts();
 }
 
-// --- CONTACTS ---
+function updateMyUI() {
+    document.getElementById('my-name-display').innerText = user.firstName + (user.lastName ? ' ' + user.lastName : '');
+    document.getElementById('my-ava').src = user.avatar;
+}
+
+// --- PROFILE ---
+function openProfile() {
+    document.getElementById('profile-modal').style.display = 'flex';
+    document.getElementById('edit-username').value = user.username || '';
+    document.getElementById('edit-name').value = user.firstName || '';
+    document.getElementById('edit-lastname').value = user.lastName || '';
+    document.getElementById('edit-birth').value = user.birthdate || '';
+    document.getElementById('edit-bio').value = user.bio || '';
+    document.getElementById('edit-ava-preview').src = user.avatar;
+}
+
+async function saveProfile() {
+    const newNick = document.getElementById('edit-username').value.trim().toLowerCase().replace('@','');
+    const newName = document.getElementById('edit-name').value.trim();
+    const newAva = document.getElementById('edit-ava-preview').src;
+
+    if(!newNick || !newName) return alert("Имя и Username обязательны!");
+
+    // Username change check
+    const oldNick = user.username.replace('@','');
+    if (newNick !== oldNick) {
+        const check = await db.ref(DB_USERNAMES+'/'+newNick).once('value');
+        if(check.exists()) return alert("Username занят!");
+        await db.ref(DB_USERNAMES+'/'+oldNick).remove();
+        await db.ref(DB_USERNAMES+'/'+newNick).set(user.phone);
+    }
+
+    const updates = {
+        username: '@'+newNick,
+        firstName: newName,
+        lastName: document.getElementById('edit-lastname').value.trim(),
+        birthdate: document.getElementById('edit-birth').value,
+        bio: document.getElementById('edit-bio').value,
+        avatar: newAva
+    };
+
+    await db.ref(DB_USERS+'/'+user.phone).update(updates);
+    
+    Object.assign(user, updates);
+    localStorage.setItem('pro_messenger_user_v2', JSON.stringify(user));
+    
+    updateMyUI();
+    document.getElementById('profile-modal').style.display = 'none';
+    alert("Профиль обновлен!");
+}
+
+// --- CONTACTS & SYNC ---
 function loadContacts() {
-    db.ref('users/'+user.phone+'/contacts').on('value', snap => {
+    // Listen for my contact list changes
+    db.ref(DB_USERS+'/'+user.phone+'/contacts').on('value', snap => {
         const list = document.getElementById('contacts-list');
         list.innerHTML = '';
+        
+        // For each contact ID
         snap.forEach(c => {
             const pid = c.key;
-            db.ref('users/'+pid).once('value', s => {
+            // Listen to EACH contact's profile changes in real-time
+            // We use 'on' instead of 'once' so if they change photo, we see it
+            db.ref(DB_USERS+'/'+pid).on('value', s => {
                 const u = s.val();
                 if(!u) return;
-                const div = document.createElement('div');
-                div.className = 'contact-item';
-                div.innerHTML = `<img src="${u.avatar}" class="avatar"><div><b>${u.firstName}</b><div style="font-size:12px;opacity:0.6;">${u.username}</div></div>`;
-                div.onclick = () => openChat(u);
-                list.appendChild(div);
+                
+                // Check if element exists to update or create
+                let el = document.getElementById('contact-'+pid);
+                if(!el) {
+                    el = document.createElement('div');
+                    el.id = 'contact-'+pid;
+                    el.className = 'contact-item';
+                    el.onclick = () => openChat(u);
+                    list.appendChild(el);
+                }
+                
+                el.innerHTML = `
+                    <img src="${u.avatar}" class="avatar">
+                    <div>
+                        <b>${u.firstName} ${u.lastName||''}</b>
+                        <div style="font-size:12px;opacity:0.6;">${u.username}</div>
+                    </div>
+                `;
+                
+                // If we are currently chatting with this person, update header
+                if (partnerUser && partnerUser.phone === u.phone) {
+                    partnerUser = u; // Update local obj
+                    document.getElementById('partner-name').innerText = u.firstName + (u.lastName ? ' '+u.lastName : '');
+                    document.getElementById('partner-ava').src = u.avatar;
+                }
             });
         });
     });
@@ -126,20 +252,28 @@ function loadContacts() {
 
 async function searchGlobal() {
     const val = document.getElementById('search-inp').value.toLowerCase().replace('@','');
-    const s = await db.ref('usernames/'+val).once('value');
-    if(s.exists() && s.val() !== user.phone) {
-        await db.ref('users/'+user.phone+'/contacts/'+s.val()).set(true);
-        alert('Контакт добавлен!');
+    if(!val) return;
+
+    const s = await db.ref(DB_USERNAMES+'/'+val).once('value');
+    if(s.exists()) {
+        const pid = s.val();
+        if(pid === user.phone) return alert("Это ваш профиль!");
+        
+        // Add to my contacts locally
+        await db.ref(DB_USERS+'/'+user.phone+'/contacts/'+pid).set(true);
+        const uSnap = await db.ref(DB_USERS+'/'+pid).once('value');
+        openChat(uSnap.val());
         document.getElementById('search-inp').value = '';
-    } else alert('Не найдено');
+    } else alert('Пользователь не найден');
 }
 
-// --- CHAT LOGIC ---
+// --- CHAT ---
 function openChat(partner) {
+    if (!partner) return;
     partnerUser = partner;
     currentChatID = user.phone < partner.phone ? `${user.phone}_${partner.phone}` : `${partner.phone}_${user.phone}`;
     
-    document.getElementById('partner-name').innerText = partner.firstName;
+    document.getElementById('partner-name').innerText = partner.firstName + (partner.lastName ? ' ' + partner.lastName : '');
     document.getElementById('partner-ava').src = partner.avatar;
     
     document.getElementById('chat-placeholder').style.display = 'none';
@@ -156,55 +290,46 @@ function closeChat() {
     document.body.classList.remove('chat-active');
     document.getElementById('chat-interface').style.display = 'none';
     document.getElementById('chat-placeholder').style.display = 'block';
+    
+    if (currentChatID) db.ref(DB_CHATS+'/'+currentChatID).off();
     currentChatID = null;
 }
 
-// --- MESSAGES & DATES & STATUSES ---
-let lastRenderedDate = null;
-
+// --- MESSAGES CORE ---
 function loadMessages() {
     const list = document.getElementById('messages');
-    list.innerHTML = '';
+    list.innerHTML = ''; 
     lastRenderedDate = null;
     
-    db.ref('chats/'+currentChatID).off();
+    db.ref(DB_CHATS+'/'+currentChatID).off();
     
-    // Child Added
-    db.ref('chats/'+currentChatID).on('child_added', snap => {
+    db.ref(DB_CHATS+'/'+currentChatID).on('child_added', snap => {
         const msg = snap.val();
         renderMessage(snap.key, msg);
-        // Mark as read if not mine
         if(msg.from !== user.phone && msg.status !== 'read') {
-            db.ref('chats/'+currentChatID+'/'+snap.key).update({status: 'read'});
+            db.ref(DB_CHATS+'/'+currentChatID+'/'+snap.key).update({status: 'read'});
         }
     });
 
-    // Child Changed (Status updates, Reactions, Deletions)
-    db.ref('chats/'+currentChatID).on('child_changed', snap => {
+    db.ref(DB_CHATS+'/'+currentChatID).on('child_changed', snap => {
         const id = snap.key;
         const data = snap.val();
-        
-        // Перерисовка для обновления галочек или реакций
-        const el = document.getElementById('msg-'+id);
-        if(el) el.remove(); // Удаляем старый DOM, рендерим заново (простой путь)
-        // Для точного сохранения позиции даты, лучше бы обновлять in-place, но для надежности перерендерим
-        // В рамках "полного кода" без фреймворков это допустимо, но лучше обновить конкретные поля.
-        // Здесь мы упростим: заменим контент, но структура сложная. 
-        // Просто обновим галочки и реакции динамически.
-        
         updateMessageStatusUI(id, data);
         updateReactionsUI(id, data);
+        if (data.hiddenFor && data.hiddenFor[user.phone]) {
+            const el = document.getElementById('msg-'+id);
+            if(el) el.remove();
+        }
     });
     
-    // Child Removed
-    db.ref('chats/'+currentChatID).on('child_removed', snap => {
+    db.ref(DB_CHATS+'/'+currentChatID).on('child_removed', snap => {
         const el = document.getElementById('msg-'+snap.key);
         if(el) el.remove();
     });
 }
 
 function renderMessage(key, data) {
-    if (data.hiddenFor && data.hiddenFor[user.phone]) return; // Скрыто "у меня"
+    if (data.hiddenFor && data.hiddenFor[user.phone]) return;
 
     const list = document.getElementById('messages');
     
@@ -224,41 +349,47 @@ function renderMessage(key, data) {
     div.id = 'msg-'+key;
     div.className = `message ${isMe ? 'my-message' : 'their-message'}`;
     
-    // Контекстное меню по ПКМ
-    div.oncontextmenu = (e) => {
-        e.preventDefault();
-        showContextMenu(e, key, data);
-    };
+    // Interactions
+    div.oncontextmenu = (e) => { e.preventDefault(); showContextMenu(e, key, data); };
+    let pressTimer;
+    div.ontouchstart = (e) => { pressTimer = setTimeout(() => showContextMenu(e.touches[0], key, data), 600); }
+    div.ontouchend = () => clearTimeout(pressTimer);
 
-    // REPLY CONTEXT
+    // REPLY
     let replyHtml = '';
     if(data.replyTo) {
-        // Мы не ищем исходный текст в базе для простоты, предполагаем, что он сохранен в snapshot
-        // или просто пишем "Ответ на сообщение". Чтобы было красиво, надо сохранять replyText в объекте сообщения
-        const rName = data.replyName || 'Сообщение';
-        const rText = data.replyText || '...';
         replyHtml = `<div class="reply-context" onclick="scrollToMsg('${data.replyTo}')">
-            <div class="reply-name">${rName}</div>
-            <div style="opacity:0.7; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${rText}</div>
+            <div class="reply-name">${data.replyName || 'Сообщение'}</div>
+            <div style="opacity:0.7; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${data.replyText||'...'}</div>
         </div>`;
     }
 
-    // CONTENT
+    // CONTENT SWITCH
     let content = '';
-    if(data.type === 'text') content = data.content;
-    else if(data.type === 'image') content = `<img src="${data.content}" class="msg-image" onclick="window.open(this.src)">`;
-    else if(data.type === 'audio') content = `<div class="audio-player"><button onclick="new Audio('${data.content}').play()" class="icon-btn" style="font-size:14px;">▶</button> Голосовое</div>`;
+    if(data.type === 'text') {
+        content = data.content;
+    } else if(data.type === 'image') {
+        content = `<img src="${data.content}" class="msg-image" onclick="window.open(this.src)">`;
+    } else if(data.type === 'video') {
+        content = `<video src="${data.content}" controls class="msg-video"></video>`;
+    } else if(data.type === 'audio') {
+        // Simple Audio Player
+        content = `<div class="audio-player">
+            <button class="audio-btn" onclick="playAudio(this, '${data.content}')">▶</button>
+            <span style="font-size:12px; margin-left:5px;">Голосовое</span>
+        </div>`;
+    }
 
-    // META (Time + Status)
+    // STATUS
     const time = new Date(data.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     let statusIcon = '';
     if(isMe) {
         if(data.status === 'sent') statusIcon = '✔';
         else if(data.status === 'read') statusIcon = '<span class="tick-read">✔✔</span>';
-        else statusIcon = '✔✔'; // delivered
+        else statusIcon = '✔✔';
     }
 
-    // REACTIONS
+    // REACTION
     let reactHtml = '';
     if(data.reactions) {
         let rStr = '';
@@ -277,6 +408,13 @@ function renderMessage(key, data) {
     list.scrollTop = list.scrollHeight;
 }
 
+function playAudio(btn, src) {
+    const a = new Audio(src);
+    a.play();
+    btn.innerText = '⏸';
+    a.onended = () => btn.innerText = '▶';
+}
+
 function updateMessageStatusUI(key, data) {
     const el = document.getElementById('status-'+key);
     if(el && data.from === user.phone) {
@@ -285,19 +423,16 @@ function updateMessageStatusUI(key, data) {
         else el.innerHTML = '✔';
     }
 }
-
 function updateReactionsUI(key, data) {
     const el = document.getElementById('react-'+key);
-    if(el && data.reactions) {
+    if(el) {
         let rStr = '';
-        for(let uid in data.reactions) rStr += data.reactions[uid];
-        el.innerHTML = `<div class="reactions-row"><div class="reaction-bubble">${rStr}</div></div>`;
-    } else if(el) {
-        el.innerHTML = '';
+        if (data.reactions) for(let uid in data.reactions) rStr += data.reactions[uid];
+        el.innerHTML = rStr ? `<div class="reactions-row"><div class="reaction-bubble">${rStr}</div></div>` : '';
     }
 }
 
-// --- SENDING ---
+// --- SENDING LOGIC ---
 async function sendMsg(type='text', content=null) {
     const inp = document.getElementById('msg-input');
     const txt = content || inp.value.trim();
@@ -308,7 +443,7 @@ async function sendMsg(type='text', content=null) {
         type: type,
         content: txt,
         ts: Date.now(),
-        status: 'sent', // sent -> delivered -> read
+        status: 'sent'
     };
 
     if(replyToID) {
@@ -318,13 +453,97 @@ async function sendMsg(type='text', content=null) {
         cancelReply();
     }
 
-    const ref = await db.ref('chats/'+currentChatID).push(msg);
+    const ref = await db.ref(DB_CHATS+'/'+currentChatID).push(msg);
     if(type === 'text') inp.value = '';
+
+    // --- АВТОМАТИЧЕСКИЙ ЧАТ (Fix for "Show chat for both") ---
+    // Force update contact lists for both users so chat appears immediately
+    db.ref(DB_USERS+'/'+partnerUser.phone+'/contacts/'+user.phone).set(true);
+    db.ref(DB_USERS+'/'+user.phone+'/contacts/'+partnerUser.phone).set(true);
     
-    // Simulate Delivery (через 1 сек, если нет бэкенда)
     setTimeout(() => {
-        db.ref('chats/'+currentChatID+'/'+ref.key).update({status: 'delivered'});
-    }, 1500);
+        db.ref(DB_CHATS+'/'+currentChatID+'/'+ref.key).update({status: 'delivered'});
+    }, 1000);
+}
+
+// --- MEDIA HANDLERS ---
+function handleImage(e) {
+    const f = e.target.files[0];
+    if(!f) return;
+    // Compress Image
+    const r = new FileReader();
+    r.onload = (v) => {
+        const i = new Image();
+        i.onload = () => {
+            const c = document.createElement('canvas');
+            const max = 900;
+            let w=i.width, h=i.height;
+            if(w>h){if(w>max){h*=max/w;w=max}}else{if(h>max){w*=max/h;h=max}}
+            c.width=w; c.height=h;
+            c.getContext('2d').drawImage(i,0,0,w,h);
+            sendMsg('image', c.toDataURL('image/jpeg', 0.8));
+        };
+        i.src = v.target.result;
+    };
+    r.readAsDataURL(f);
+}
+
+function handleVideo(e) {
+    const f = e.target.files[0];
+    if(!f) return;
+    // Limit check: 5MB
+    if(f.size > 5 * 1024 * 1024) return alert("Видео слишком большое! Максимум 5 МБ.");
+    
+    const r = new FileReader();
+    r.onload = (v) => {
+        sendMsg('video', v.target.result);
+    };
+    r.readAsDataURL(f);
+}
+
+function handleAva(e) {
+    const f = e.target.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = (v) => {
+        const i = new Image();
+        i.onload = () => {
+            const c = document.createElement('canvas');
+            c.width=200; c.height=200; // Avatar standard size
+            c.getContext('2d').drawImage(i,0,0,200,200);
+            document.getElementById('edit-ava-preview').src = c.toDataURL('image/jpeg',0.8);
+        };
+        i.src = v.target.result;
+    };
+    r.readAsDataURL(f);
+}
+
+// --- VOICE RECORDING FIX ---
+function startRec() {
+    if (!navigator.mediaDevices) return alert("Микрофон недоступен");
+    navigator.mediaDevices.getUserMedia({audio:true}).then(s => {
+        mediaRecorder = new MediaRecorder(s);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.start();
+        document.getElementById('mic-btn').classList.add('recording');
+    }).catch(e => alert("Ошибка микрофона: " + e));
+}
+
+function stopRec() {
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        document.getElementById('mic-btn').classList.remove('recording');
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                const base64data = reader.result;
+                sendMsg('audio', base64data);
+            }
+        }
+    }
 }
 
 // --- CONTEXT ACTIONS ---
@@ -332,109 +551,104 @@ function showContextMenu(e, key, data) {
     selectedMsgID = key;
     selectedMsgData = data;
     const menu = document.getElementById('ctx-menu');
+    let x = e.clientX || e.pageX;
+    let y = e.clientY || e.pageY;
     
-    // Позиционирование
-    const rect = document.getElementById('msg-'+key).getBoundingClientRect();
     menu.style.display = 'block';
-    menu.style.top = rect.top + 'px';
-    // Если сообщение справа, меню левее
-    if (data.from === user.phone) menu.style.left = (rect.left - 180) + 'px';
-    else menu.style.left = (rect.right + 10) + 'px';
+    if (y + 250 > window.innerHeight) y -= 250;
+    menu.style.top = y + 'px';
+    menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
 }
 
-// 1. Reply
 function replyMsg() {
     replyToID = selectedMsgID;
-    const txt = selectedMsgData.type === 'text' ? selectedMsgData.content : '[Медиа]';
+    let txt = '...';
+    if(selectedMsgData.type === 'text') txt = selectedMsgData.content;
+    else if(selectedMsgData.type === 'image') txt = '[Фото]';
+    else if(selectedMsgData.type === 'video') txt = '[Видео]';
+    else if(selectedMsgData.type === 'audio') txt = '[Голосовое]';
+    
     document.getElementById('reply-bar').style.display = 'flex';
     const prev = document.getElementById('reply-text-preview');
     prev.innerText = txt;
-    // Определяем имя
     const isMe = selectedMsgData.from === user.phone;
     prev.setAttribute('data-name', isMe ? user.firstName : partnerUser.firstName);
-    
     document.getElementById('ctx-menu').style.display = 'none';
     document.getElementById('msg-input').focus();
 }
+
 function cancelReply() {
     replyToID = null;
     document.getElementById('reply-bar').style.display = 'none';
 }
 
-// 2. Reactions
 function addReaction(emoji) {
     if(!selectedMsgID) return;
-    db.ref('chats/'+currentChatID+'/'+selectedMsgID+'/reactions/'+user.phone).set(emoji);
+    db.ref(DB_CHATS+'/'+currentChatID+'/'+selectedMsgID+'/reactions/'+user.phone).set(emoji);
     document.getElementById('ctx-menu').style.display = 'none';
 }
 
-// 3. Pin
 function pinMsg() {
     if(!selectedMsgID) return;
-    const txt = selectedMsgData.type === 'text' ? selectedMsgData.content : '[Медиа]';
-    db.ref('chats/'+currentChatID+'_meta/pinned').set({
-        id: selectedMsgID,
-        text: txt
-    });
+    let txt = '...';
+    if(selectedMsgData.type === 'text') txt = selectedMsgData.content;
+    else txt = '[' + selectedMsgData.type.toUpperCase() + ']';
+    
+    db.ref(DB_CHATS+'/'+currentChatID+'_meta/pinned').set({ id: selectedMsgID, text: txt });
     document.getElementById('ctx-menu').style.display = 'none';
 }
+
 function checkPinned() {
-    db.ref('chats/'+currentChatID+'_meta/pinned').on('value', snap => {
+    db.ref(DB_CHATS+'/'+currentChatID+'_meta/pinned').on('value', snap => {
         const pin = snap.val();
         const bar = document.getElementById('pinned-msg-bar');
         if(pin) {
             bar.style.display = 'flex';
             document.getElementById('pinned-text').innerText = pin.text;
-            bar.onclick = () => scrollToMsg(pin.id);
         } else {
             bar.style.display = 'none';
         }
     });
 }
-function unpinMsg() {
-    db.ref('chats/'+currentChatID+'_meta/pinned').remove();
+function unpinMsg() { db.ref(DB_CHATS+'/'+currentChatID+'_meta/pinned').remove(); }
+function scrollToPinned() { 
+    db.ref(DB_CHATS+'/'+currentChatID+'_meta/pinned').once('value', s => {
+        if(s.exists()) scrollToMsg(s.val().id);
+    });
 }
 function scrollToMsg(id) {
     const el = document.getElementById('msg-'+id);
     if(el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
+    else alert("Сообщение выше, пролистайте чат");
 }
 
-// 4. Copy
 function copyMsg() {
-    if(selectedMsgData.type === 'text') {
-        navigator.clipboard.writeText(selectedMsgData.content);
-        alert('Скопировано!');
-    }
+    if(selectedMsgData.type === 'text') navigator.clipboard.writeText(selectedMsgData.content);
     document.getElementById('ctx-menu').style.display = 'none';
 }
 
-// 5. Delete
 function deleteMsg(everyone) {
     if(everyone) {
-        // Удалить у всех (реальное удаление узла)
-        if(selectedMsgData.from !== user.phone) return alert('Можно удалять только свои сообщения у всех!');
-        db.ref('chats/'+currentChatID+'/'+selectedMsgID).remove();
+        if(selectedMsgData.from !== user.phone) return alert("Можно удалить только свое сообщение у всех!");
+        db.ref(DB_CHATS+'/'+currentChatID+'/'+selectedMsgID).remove();
     } else {
-        // Удалить у меня (флаг скрытия)
-        db.ref('chats/'+currentChatID+'/'+selectedMsgID+'/hiddenFor/'+user.phone).set(true);
+        db.ref(DB_CHATS+'/'+currentChatID+'/'+selectedMsgID+'/hiddenFor/'+user.phone).set(true);
         const el = document.getElementById('msg-'+selectedMsgID);
         if(el) el.remove();
     }
     document.getElementById('ctx-menu').style.display = 'none';
 }
 
-// 6. Forward
 function forwardMsgInit() {
     document.getElementById('ctx-menu').style.display = 'none';
     document.getElementById('forward-modal').style.display = 'flex';
     
-    // Load contacts into modal
-    db.ref('users/'+user.phone+'/contacts').once('value', snap => {
+    db.ref(DB_USERS+'/'+user.phone+'/contacts').once('value', snap => {
         const list = document.getElementById('forward-list');
         list.innerHTML = '';
         snap.forEach(c => {
             const pid = c.key;
-            db.ref('users/'+pid).once('value', s => {
+            db.ref(DB_USERS+'/'+pid).once('value', s => {
                 const u = s.val();
                 const div = document.createElement('div');
                 div.className = 'contact-item';
@@ -445,10 +659,9 @@ function forwardMsgInit() {
         });
     });
 }
+
 async function doForward(targetUser) {
-    // Determine target Chat ID
     const targetChatID = user.phone < targetUser.phone ? `${user.phone}_${targetUser.phone}` : `${targetUser.phone}_${user.phone}`;
-    
     const newMsg = {
         from: user.phone,
         type: selectedMsgData.type,
@@ -457,110 +670,50 @@ async function doForward(targetUser) {
         status: 'sent',
         isForwarded: true
     };
+    await db.ref(DB_CHATS+'/'+targetChatID).push(newMsg);
+    // Auto-add contact on forward
+    db.ref(DB_USERS+'/'+targetUser.phone+'/contacts/'+user.phone).set(true);
+    db.ref(DB_USERS+'/'+user.phone+'/contacts/'+targetUser.phone).set(true);
     
-    await db.ref('chats/'+targetChatID).push(newMsg);
     document.getElementById('forward-modal').style.display = 'none';
     alert('Переслано!');
 }
 
-
-// --- TYPING & STATUS ---
-function trackStatus() {
-    db.ref('status/'+partnerUser.phone).on('value', snap => {
-        const val = snap.val();
-        const el = document.getElementById('partner-status');
-        const st = document.getElementById('partner-status');
-        
-        if(val === 'online') {
-            st.innerText = 'в сети';
-            st.style.color = 'var(--status-online)';
-        } else {
-            st.style.color = 'var(--status-offline)';
-            const d = new Date(val);
-            const now = new Date();
-            let str = (now - d < 86400000) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString();
-            st.innerText = 'был(а) ' + str;
-        }
-    });
-}
-
+// --- UTILS ---
 function handleTyping() {
-    db.ref('typing/'+currentChatID+'/'+user.phone).set(true);
+    db.ref(DB_TYPING+'/'+currentChatID+'/'+user.phone).set(true);
     clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => db.ref('typing/'+currentChatID+'/'+user.phone).remove(), 2000);
+    typingTimeout = setTimeout(() => db.ref(DB_TYPING+'/'+currentChatID+'/'+user.phone).remove(), 2000);
 }
 
 function trackTyping() {
-    db.ref('typing/'+currentChatID+'/'+partnerUser.phone).on('value', snap => {
+    db.ref(DB_TYPING+'/'+currentChatID+'/'+partnerUser.phone).on('value', snap => {
+        const st = document.getElementById('partner-status');
         if(snap.val()) {
-            document.getElementById('partner-status').innerText = 'печатает...';
-            document.getElementById('partner-status').style.color = 'var(--status-online)';
+            st.innerText = 'печатает...';
+            st.style.color = 'var(--accent)';
+        } else {
+            db.ref(DB_STATUS+'/'+partnerUser.phone).once('value', s => updateStatusUI(s.val()));
         }
     });
 }
 
-// --- PROFILE & MEDIA UTIL ---
-function handleFile(e) {
-    const f = e.target.files[0];
-    if(!f) return;
-    const r = new FileReader();
-    r.onload = (v) => resize(v.target.result, (res) => sendMsg('image', res));
-    r.readAsDataURL(f);
-}
-function handleAva(e) {
-    const f = e.target.files[0];
-    if(!f) return;
-    const r = new FileReader();
-    r.onload = (v) => resize(v.target.result, (res) => document.getElementById('edit-ava-preview').src = res);
-    r.readAsDataURL(f);
-}
-function resize(url, cb) {
-    const i = new Image();
-    i.onload = () => {
-        const c = document.createElement('canvas');
-        const max = 800;
-        let w=i.width, h=i.height;
-        if(w>h){if(w>max){h*=max/w;w=max}}else{if(h>max){w*=max/h;h=max}}
-        c.width=w; c.height=h;
-        c.getContext('2d').drawImage(i,0,0,w,h);
-        cb(c.toDataURL('image/jpeg',0.7));
-    };
-    i.src=url;
-}
-async function saveProfile() {
-    const up = {
-        firstName: document.getElementById('edit-name').value,
-        lastName: document.getElementById('edit-lastname').value,
-        bio: document.getElementById('edit-bio').value,
-        birthdate: document.getElementById('edit-birth').value,
-        avatar: document.getElementById('edit-ava-preview').src,
-        username: '@'+document.getElementById('edit-username').value.replace('@','')
-    };
-    await db.ref('users/'+user.phone).update(up);
-    Object.assign(user, up);
-    localStorage.setItem('pro_messenger_user', JSON.stringify(user));
-    document.getElementById('my-name-display').innerText = user.firstName;
-    document.getElementById('my-ava').src = user.avatar;
-    document.getElementById('profile-modal').style.display='none';
+function trackStatus() {
+    db.ref(DB_STATUS+'/'+partnerUser.phone).on('value', snap => updateStatusUI(snap.val()));
 }
 
-function startRec() {
-    navigator.mediaDevices.getUserMedia({audio:true}).then(s => {
-        mediaRecorder = new MediaRecorder(s);
-        audioChunks = [];
-        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-        mediaRecorder.start();
-        document.getElementById('mic-btn').classList.add('recording');
-    });
-}
-function stopRec() {
-    if(mediaRecorder) {
-        mediaRecorder.stop();
-        document.getElementById('mic-btn').classList.remove('recording');
-        mediaRecorder.onstop = () => {
-            const r = new FileReader();
-            r.onload = e => sendMsg('audio', e.target.result);
-            r.readAsDataURL(new Blob(audioChunks));
-        }
+function updateStatusUI(val) {
+    const el = document.getElementById('partner-status');
+    if (el.innerText === 'печатает...') return; 
+    
+    if(val === 'online') {
+        el.innerText = 'в сети';
+        el.style.color = 'var(--status-online)';
+    } else {
+        el.style.color = 'var(--text-secondary)';
+        const d = new Date(val);
+        const now = new Date();
+        let str = (now - d < 86400000) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString();
+        el.innerText = 'был(а) ' + str;
     }
 }
